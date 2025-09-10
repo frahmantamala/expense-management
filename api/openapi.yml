@@ -1,0 +1,373 @@
+openapi: 3.0.3
+info:
+  title: Expense Management API
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        department:
+          type: string
+        is_active:
+          type: boolean
+    AuthRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+    ExpenseCreate:
+      type: object
+      required: [amount_idr, description, expense_date]
+      properties:
+        amount_idr:
+          type: integer
+          minimum: 10000
+          maximum: 50000000
+        description:
+          type: string
+        category:
+          type: string
+        expense_date:
+          type: string
+          format: date
+    Expense:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        amount_idr: { type: integer }
+        description: { type: string }
+        category: { type: string }
+        receipt_url: { type: string }
+        expense_status: { type: string }
+        expense_date: { type: string, format: date }
+        submitted_at: { type: string, format: date-time }
+        processed_at: { type: string, format: date-time, nullable: true }
+    ApprovalRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+    PaymentRetryRequest:
+      type: object
+      properties:
+        external_id:
+          type: string
+    PagedExpenses:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        per_page:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Expense"
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+    ComponentStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+        checked_at:
+          type: string
+          format: date-time
+          example: "2025-09-10T23:55:12.185957+07:00"
+        duration_ms:
+          type: integer
+          example: 0
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+        checked_at:
+          type: string
+          format: date-time
+          example: "2025-09-10T23:55:12.185957+07:00"
+        components:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ComponentStatus'
+
+paths:
+  /auth/login:
+    post:
+      summary: User login
+      operationId: AuthLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '200':
+          description: tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/refresh:
+    post:
+      summary: Refresh token
+      operationId: AuthRefresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: new tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/logout:
+    post:
+      summary: Logout
+      operationId: AuthLogout
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: logged out
+
+  /users/me:
+    get:
+      summary: Get current user
+      operationId: GetCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /expenses:
+    post:
+      summary: Submit expense
+      operationId: CreateExpense
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+    get:
+      summary: List expenses
+      operationId: ListExpenses
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: paged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedExpenses'
+
+  /expenses/{id}:
+    get:
+      summary: Get expense
+      operationId: GetExpense
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: expense details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+
+  /expenses/{id}/receipt:
+    post:
+      summary: Upload receipt
+      operationId: UploadReceipt
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                receipt:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: uploaded
+
+  /expenses/{id}/approve:
+    put:
+      summary: Approve expense
+      operationId: ApproveExpense
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+
+  /expenses/{id}/reject:
+    put:
+      summary: Reject expense
+      operationId: RejectExpense
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+
+  /expenses/{id}/payment/retry:
+    post:
+      summary: Retry payment
+      operationId: RetryPayment
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRetryRequest'
+      responses:
+        '200':
+          description: payment retried
+
+  /health:
+    get:
+      summary: Health check
+      operationId: Health
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
