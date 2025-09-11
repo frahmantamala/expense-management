@@ -20,6 +20,10 @@ func Init(env string) {
 	slog.SetDefault(defaultLogger)
 }
 
-func L() *slog.Logger {
+func LoggerWrapper() *slog.Logger {
+	if defaultLogger == nil {
+		// lazy initialize a development logger to avoid nil pointer panics
+		Init("development")
+	}
 	return defaultLogger
 }

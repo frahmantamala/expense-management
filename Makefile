@@ -12,6 +12,7 @@ STEP ?= 0
 
 # Build the application (expects main.go)
 build:
+	mkdir -p bin
 	go build -o bin/expense-management main.go
 
 # Run the application (expects main.go to accept a server command)
@@ -28,7 +29,12 @@ run-debug:
 
 # Generate OpenAPI code via oapi-codegen using config file
 generate.openapi:
-	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./api/oapi_codegen.yaml ./api/openapi.yml
+	@echo "generating openapi types "
+	@command -v oapi-codegen >/dev/null 2>&1 || { \
+		echo "oapi-codegen not found - installing..."; \
+		go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest; \
+	}
+	@oapi-codegen -config $(OAPI_CFG) $(OPENAPI)
 
 # Create a new SQL migration (sql)
 # Usage: make migration NAME=create_users_table
@@ -76,12 +82,16 @@ deps:
 	go mod tidy
 
 # Seed DB (expects cmd seed implemented)
+
 seed:
-	go run main.go seed
+	@$(MAKE) build
+	@./bin/expense-management seed
 
 # Re-seed DB: clear + seed
+
 seed-fresh:
-	go run main.go seed --clear
+	@$(MAKE) build
+	@./bin/expense-management seed --clear
 
 # Setup dev env
 dev-setup: deps migrate

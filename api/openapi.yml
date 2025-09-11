@@ -24,6 +24,11 @@ components:
           type: string
         is_active:
           type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
+          example: ["can_approve", "can_reject", "can_read_expense"]
     AuthRequest:
       type: object
       required: [email, password]
@@ -110,6 +115,7 @@ components:
         duration_ms:
           type: integer
           example: 0
+
     HealthResponse:
       type: object
       properties:

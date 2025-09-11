@@ -11,14 +11,18 @@ import (
 	"time"
 
 	"github.com/frahmantamala/expense-management/internal"
+	auth "github.com/frahmantamala/expense-management/internal/auth"
+	authPostgres "github.com/frahmantamala/expense-management/internal/auth/postgres"
 	"github.com/frahmantamala/expense-management/internal/transport/rest"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 
+	cors "github.com/frahmantamala/expense-management/internal/transport/middleware"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 var httpServerCmd = &cobra.Command{
@@ -32,10 +36,11 @@ var httpServerCmd = &cobra.Command{
 
 type Dependencies struct {
 	Config        *internal.Config
-	DB            *sqlx.DB
+	DB            *gorm.DB
 	Router        *chi.Mux
 	HealthChecker *rest.HealthHandler
 	Logger        *slog.Logger
+	AuthHandler   *auth.Handler
 }
 
 func startHTTPServer() {
@@ -75,8 +80,13 @@ func startHTTPServer() {
 		if err := server.Shutdown(ctx); err != nil {
 			slog.Error("Server shutdown error", "error", err)
 		}
-		if err := deps.DB.Close(); err != nil {
-			slog.Error("Database close error", "error", err)
+		// close underlying sql.DB from gorm
+		if sqlDB, err := deps.DB.DB(); err == nil {
+			if err := sqlDB.Close(); err != nil {
+				slog.Error("Database close error", "error", err)
+			}
+		} else {
+			slog.Error("failed to get underlying sql DB for close", "error", err)
 		}
 	case err := <-serverErrChan:
 		if err != nil && err != http.ErrServerClosed {
@@ -89,12 +99,30 @@ func startHTTPServer() {
 }
 
 func setupRoutes(deps *Dependencies) {
-	// Add middlewares
+	// Add middlewares: defensive recover and CORS first
+	deps.Router.Use(cors.CORS)
 	deps.Router.Use(middleware.RequestID)
 	deps.Router.Use(middleware.Logger)
 	deps.Router.Use(middleware.Recoverer)
-	// Register health endpoint and other routes
-	rest.RegisterAllRoutes(deps.Router, deps.DB.DB)
+
+	// Use GORM-based auth repo
+	authRepo := authPostgres.NewRepository(deps.DB)
+
+	// Token secrets come from Security config
+	tokenGen := auth.NewJWTTokenGenerator(
+		deps.Config.Security.SessionSecret,
+		deps.Config.Security.SessionSecret,
+	)
+
+	authService := auth.NewService(authRepo, tokenGen)
+	authHandler := auth.NewHandler(authService)
+
+	// Set auth handler in dependencies
+	deps.AuthHandler = authHandler
+
+	// Register health endpoint and other routes. Pass underlying *sql.DB to the router.
+	sqlDBForRoutes, _ := deps.DB.DB()
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler)
 }
 
 func initializeDependencies() (*Dependencies, error) {
@@ -109,11 +137,16 @@ func initializeDependencies() (*Dependencies, error) {
 	}
 
 	router := chi.NewRouter()
-	healthChecker := rest.NewHealthHandler(db.DB)
+	// get underlying *sql.DB for health checks
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql DB from gorm: %w", err)
+	}
+	healthChecker := rest.NewHealthHandler(sqlDB)
 
 	return &Dependencies{
 		Config:        config,
-		Logger:        logger.L(),
+		Logger:        logger.LoggerWrapper(),
 		DB:            db,
 		Router:        router,
 		HealthChecker: healthChecker,
@@ -121,23 +154,26 @@ func initializeDependencies() (*Dependencies, error) {
 }
 
 // initDB initializes the database connection
-func initDB(cfg internal.DatabaseConfig) (*sqlx.DB, error) {
-	const driver = "pgx"
-
-	// register traced pgx stdlib driver
-	dbConn, err := sqlx.Connect(driver, cfg.Source)
+func initDB(cfg internal.DatabaseConfig) (*gorm.DB, error) {
+	// open gorm db using postgres driver
+	gormDB, err := gorm.Open(postgres.Open(cfg.Source), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open traced db connection: %w", err)
+		return nil, fmt.Errorf("failed to open gorm db: %w", err)
 	}
 
-	dbConn.SetMaxIdleConns(cfg.MaxIdleConns)
-	dbConn.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql DB from gorm: %w", err)
+	}
+
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 
 	// verify connection; close underlying *sql.DB on failure
-	if err := dbConn.Ping(); err != nil {
-		_ = dbConn.Close()
+	if err := sqlDB.Ping(); err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return sqlx.NewDb(dbConn.DB, driver), dbConn.Ping()
+	return gormDB, nil
 }

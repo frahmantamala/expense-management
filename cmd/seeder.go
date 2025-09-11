@@ -1,0 +1,103 @@
+package cmd
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/spf13/cobra"
+	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	clearData bool
+)
+
+var seedCmd = &cobra.Command{
+	Use:   "seed",
+	Short: "Seed the database with sample data",
+	Long:  `Seed the database with sample data for development and testing purposes.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := loadConfig(".")
+		if err != nil {
+			log.Fatalf("failed to load config: %v", err)
+		}
+
+		db, err := initDB(cfg.Database)
+		if err != nil {
+			log.Fatalf("failed to init db: %v", err)
+		}
+
+		password := "password"
+		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+		email := "fadhil@mail.com"
+		name := "Fadhil"
+		var exists int
+		row := db.Raw("SELECT 1 FROM users WHERE email = ?", email).Row()
+		userExists := false
+		if err := row.Scan(&exists); err == nil {
+			fmt.Println("admin user already exists; will ensure permissions")
+			userExists = true
+		}
+
+		if !userExists {
+			if err := db.Exec("INSERT INTO users (email, name, password_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, true, now(), now())", email, name, string(hash)).Error; err != nil {
+				log.Fatalf("failed to insert admin user: %v", err)
+			}
+			fmt.Println("Seeded admin user:", email)
+		}
+
+		// seed permissions
+		permissions := []struct {
+			Name string
+			Desc string
+		}{
+			{"admin", "full administrator"},
+			{"approve_expenses", "Can approve expenses"},
+			{"view_expenses", "Can view expenses"},
+			{"reject_expenses", "Can reject expenses"},
+			{"create_expenses", "Can create expenses"},
+			{"edit_expenses", "Can edit expenses"},
+		}
+
+		for _, p := range permissions {
+			var pid int64
+			row := db.Raw("SELECT id FROM permissions WHERE name = ?", p.Name).Row()
+			if err := row.Scan(&pid); err != nil {
+				// not found -> insert
+				if err := db.Exec("INSERT INTO permissions (name, description, created_at) VALUES (?, ?, now())", p.Name, p.Desc).Error; err != nil {
+					log.Fatalf("failed to insert permission %s: %v", p.Name, err)
+				}
+			}
+		}
+
+		// grant permissions to user
+		var userID int64
+		if err := db.Raw("SELECT id FROM users WHERE email = ?", email).Row().Scan(&userID); err != nil {
+			log.Fatalf("failed to lookup user id: %v", err)
+		}
+
+		for _, p := range permissions {
+			var pid int64
+			if err := db.Raw("SELECT id FROM permissions WHERE name = ?", p.Name).Row().Scan(&pid); err != nil {
+				log.Fatalf("permission not found after insert %s: %v", p.Name, err)
+			}
+
+			var exists int
+			if err := db.Raw("SELECT 1 FROM user_permissions WHERE user_id = ? AND permission_id = ?", userID, pid).Row().Scan(&exists); err == nil {
+				continue
+			}
+
+			if err := db.Exec("INSERT INTO user_permissions (user_id, permission_id, granted_by, created_at) VALUES (?, ?, NULL, now())", userID, pid).Error; err != nil {
+				log.Fatalf("failed to grant permission %s to user: %v", p.Name, err)
+			}
+		}
+
+		fmt.Println("Granted permissions to:", email)
+	},
+}
+
+func init() {
+	seedCmd.Flags().BoolVar(&clearData, "clear", false, "Clear existing data before seeding")
+	rootCmd.AddCommand(seedCmd)
+}
