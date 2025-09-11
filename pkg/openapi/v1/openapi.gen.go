@@ -21,6 +21,34 @@ const (
 	BearerAuthScopes = "BearerAuth.Scopes"
 )
 
+// Defines values for ExpenseExpenseStatus.
+const (
+	ExpenseExpenseStatusApproved        ExpenseExpenseStatus = "approved"
+	ExpenseExpenseStatusPendingApproval ExpenseExpenseStatus = "pending_approval"
+	ExpenseExpenseStatusRejected        ExpenseExpenseStatus = "rejected"
+)
+
+// Defines values for ExpenseCreateCategory.
+const (
+	Akomodasi  ExpenseCreateCategory = "akomodasi"
+	BahanBakar ExpenseCreateCategory = "bahan_bakar"
+	Kantor     ExpenseCreateCategory = "kantor"
+	Kesehatan  ExpenseCreateCategory = "kesehatan"
+	Komunikasi ExpenseCreateCategory = "komunikasi"
+	LainLain   ExpenseCreateCategory = "lain_lain"
+	Liburan    ExpenseCreateCategory = "liburan"
+	Makan      ExpenseCreateCategory = "makan"
+	Pelatihan  ExpenseCreateCategory = "pelatihan"
+	Pemasaran  ExpenseCreateCategory = "pemasaran"
+	Perjalanan ExpenseCreateCategory = "perjalanan"
+	Software   ExpenseCreateCategory = "software"
+)
+
+// Defines values for RejectExpenseJSONBodyStatus.
+const (
+	RejectExpenseJSONBodyStatusRejected RejectExpenseJSONBodyStatus = "rejected"
+)
+
 // ApprovalRequest defines model for ApprovalRequest.
 type ApprovalRequest struct {
 	Notes *string `json:"notes,omitempty"`
@@ -53,25 +81,60 @@ type ErrorResponse struct {
 
 // Expense defines model for Expense.
 type Expense struct {
-	AmountIdr     *int                `json:"amount_idr,omitempty"`
-	Category      *string             `json:"category,omitempty"`
-	Description   *string             `json:"description,omitempty"`
-	ExpenseDate   *openapi_types.Date `json:"expense_date,omitempty"`
-	ExpenseStatus *string             `json:"expense_status,omitempty"`
-	Id            *int                `json:"id,omitempty"`
-	ProcessedAt   *time.Time          `json:"processed_at"`
-	ReceiptUrl    *string             `json:"receipt_url,omitempty"`
-	SubmittedAt   *time.Time          `json:"submitted_at,omitempty"`
-	UserId        *int                `json:"user_id,omitempty"`
+	// AmountIdr Amount in Indonesian Rupiah
+	AmountIdr *int `json:"amount_idr,omitempty"`
+
+	// Category Expense category
+	Category *string `json:"category,omitempty"`
+
+	// CreatedAt When the record was created
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// Description Expense description
+	Description *string `json:"description,omitempty"`
+
+	// ExpenseDate Date when the expense occurred
+	ExpenseDate *time.Time `json:"expense_date,omitempty"`
+
+	// ExpenseStatus Current status of the expense
+	ExpenseStatus *ExpenseExpenseStatus `json:"expense_status,omitempty"`
+
+	// Id Unique expense ID
+	Id *int `json:"id,omitempty"`
+
+	// ProcessedAt When the expense was processed (approved/rejected)
+	ProcessedAt *time.Time `json:"processed_at"`
+
+	// SubmittedAt When the expense was submitted
+	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
+
+	// UpdatedAt When the record was last updated
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// UserId ID of user who created the expense
+	UserId *int `json:"user_id,omitempty"`
 }
+
+// ExpenseExpenseStatus Current status of the expense
+type ExpenseExpenseStatus string
 
 // ExpenseCreate defines model for ExpenseCreate.
 type ExpenseCreate struct {
-	AmountIdr   int                `json:"amount_idr"`
-	Category    *string            `json:"category,omitempty"`
-	Description string             `json:"description"`
-	ExpenseDate openapi_types.Date `json:"expense_date"`
+	// AmountIdr Amount in Indonesian Rupiah
+	AmountIdr int `json:"amount_idr"`
+
+	// Category Expense category
+	Category ExpenseCreateCategory `json:"category"`
+
+	// Description Expense description
+	Description string `json:"description"`
+
+	// ExpenseDate Date when the expense occurred
+	ExpenseDate time.Time `json:"expense_date"`
 }
+
+// ExpenseCreateCategory Expense category
+type ExpenseCreateCategory string
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
@@ -116,10 +179,25 @@ type ListExpensesParams struct {
 	Category *string `form:"category,omitempty" json:"category,omitempty"`
 }
 
+// GetPendingApprovalsParams defines parameters for GetPendingApprovals.
+type GetPendingApprovalsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // UploadReceiptMultipartBody defines parameters for UploadReceipt.
 type UploadReceiptMultipartBody struct {
 	Receipt *openapi_types.File `json:"receipt,omitempty"`
 }
+
+// RejectExpenseJSONBody defines parameters for RejectExpense.
+type RejectExpenseJSONBody struct {
+	Reason string                       `json:"reason"`
+	Status *RejectExpenseJSONBodyStatus `json:"status,omitempty"`
+}
+
+// RejectExpenseJSONBodyStatus defines parameters for RejectExpense.
+type RejectExpenseJSONBodyStatus string
 
 // AuthLoginJSONRequestBody defines body for AuthLogin for application/json ContentType.
 type AuthLoginJSONRequestBody = AuthRequest
@@ -140,33 +218,42 @@ type RetryPaymentJSONRequestBody = PaymentRetryRequest
 type UploadReceiptMultipartRequestBody UploadReceiptMultipartBody
 
 // RejectExpenseJSONRequestBody defines body for RejectExpense for application/json ContentType.
-type RejectExpenseJSONRequestBody = ApprovalRequest
+type RejectExpenseJSONRequestBody RejectExpenseJSONBody
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

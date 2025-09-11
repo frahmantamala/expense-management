@@ -48,6 +48,7 @@ type AuthService interface {
 	Authenticate(dto LoginDTO) (AuthTokens, error)
 	RefreshTokens(refreshToken string) (AuthTokens, error)
 	ValidateAccessToken(tokenString string) (*Claims, error)
+	GetUserWithPermissions(userID int64) (*User, error)
 }
 
 type AuthTokens struct {

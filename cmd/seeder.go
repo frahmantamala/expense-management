@@ -94,6 +94,32 @@ var seedCmd = &cobra.Command{
 		}
 
 		fmt.Println("Granted permissions to:", email)
+
+		// seed expense categories
+		categories := []struct {
+			Name string
+			Desc string
+		}{
+			{"perjalanan", "perjalanan dinas dan transportasi"},
+			{"makan", "makan dan hiburan"},
+			{"kantor", "perlengkapan, peralatan kantor"},
+			{"liburan", "biaya liburan dan rekreasi"},
+			{"lain_lain", "biaya lain-lain"},
+		}
+
+		for _, c := range categories {
+			var exists int
+			row := db.Raw("SELECT 1 FROM expense_categories WHERE name = ?", c.Name).Row()
+			if err := row.Scan(&exists); err != nil {
+				// not found -> insert
+				if err := db.Exec("INSERT INTO expense_categories (name, description, is_active, created_at) VALUES (?, ?, true, now())", c.Name, c.Desc).Error; err != nil {
+					log.Fatalf("failed to insert expense category %s: %v", c.Name, err)
+				}
+				fmt.Printf("Seeded expense category: %s\n", c.Name)
+			}
+		}
+
+		fmt.Println("Expense categories seeded successfully")
 	},
 }
 

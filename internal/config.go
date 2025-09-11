@@ -1,10 +1,6 @@
 package internal
 
 import (
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
@@ -41,8 +37,6 @@ type DatabaseConfig struct {
 }
 
 type SecurityConfig struct {
-	JWTPrivateKey        string        `mapstructure:"jwt_private_key" validate:"required"`
-	JWTPublicKey         string        `mapstructure:"jwt_public_key" validate:"required"`
 	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration" validate:"required,min=1m,max=1h"`
 	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration" validate:"required,min=1h"`
 	BCryptCost           int           `mapstructure:"bcrypt_cost" validate:"required,min=10,max=15"`
@@ -77,8 +71,6 @@ type LoggingConfig struct {
 	Format string `mapstructure:"format" validate:"required,oneof=json text"`
 }
 
-// ----------------- HELPERS -----------------
-
 func getEnv(key, defaultVal string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -95,8 +87,6 @@ func getEnvAsInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
-// ----------------- VALIDATION -----------------
-
 func (c *Config) Validate() error {
 	var errs []string
 
@@ -106,10 +96,6 @@ func (c *Config) Validate() error {
 
 	if err := c.Database.Validate(); err != nil {
 		errs = append(errs, fmt.Sprintf("database config: %v", err))
-	}
-
-	if err := c.Security.Validate(); err != nil {
-		errs = append(errs, fmt.Sprintf("security config: %v", err))
 	}
 
 	if err := c.Payment.Validate(); err != nil {
@@ -151,51 +137,6 @@ func (c *DatabaseConfig) Validate() error {
 
 func (c *DatabaseConfig) GetDSN() string {
 	return c.Source
-}
-
-func (c *SecurityConfig) Validate() error {
-	if _, err := c.GetPrivateKey(); err != nil {
-		return fmt.Errorf("invalid JWT private key: %w", err)
-	}
-	if _, err := c.GetPublicKey(); err != nil {
-		return fmt.Errorf("invalid JWT public key: %w", err)
-	}
-	if len(c.SessionSecret) < 32 {
-		return errors.New("session secret must be at least 32 characters")
-	}
-	return nil
-}
-
-func (c *SecurityConfig) GetPrivateKey() (*rsa.PrivateKey, error) {
-	keyData, err := base64.StdEncoding.DecodeString(c.JWTPrivateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode private key: %w", err)
-	}
-	block, _ := pem.Decode(keyData)
-	if block == nil {
-		return nil, errors.New("failed to parse PEM block")
-	}
-	return x509.ParsePKCS1PrivateKey(block.Bytes)
-}
-
-func (c *SecurityConfig) GetPublicKey() (*rsa.PublicKey, error) {
-	keyData, err := base64.StdEncoding.DecodeString(c.JWTPublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode public key: %w", err)
-	}
-	block, _ := pem.Decode(keyData)
-	if block == nil {
-		return nil, errors.New("failed to parse PEM block")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	rsaPub, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return nil, errors.New("not an RSA public key")
-	}
-	return rsaPub, nil
 }
 
 func (c *PaymentConfig) Validate() error {

@@ -46,32 +46,84 @@ components:
           type: string
     ExpenseCreate:
       type: object
-      required: [amount_idr, description, expense_date]
+      required: [amount_idr, description, category, expense_date]
       properties:
         amount_idr:
           type: integer
-          minimum: 10000
-          maximum: 50000000
+          minimum: 1
+          maximum: 999999999
+          description: Amount in Indonesian Rupiah
+          example: 50000
         description:
           type: string
+          minLength: 1
+          maxLength: 500
+          description: Expense description
+          example: "Makan siang dengan klien"
         category:
           type: string
+          description: Expense category
+          example: "makan"
+          enum: ["perjalanan", "makan", "kantor", "pemasaran", "pelatihan", "komunikasi", "software", "kesehatan", "akomodasi", "bahan_bakar", "liburan", "lain_lain"]
         expense_date:
           type: string
-          format: date
+          format: date-time
+          description: Date when the expense occurred
+          example: "2025-09-11T00:00:00Z"
     Expense:
       type: object
       properties:
-        id: { type: integer }
-        user_id: { type: integer }
-        amount_idr: { type: integer }
-        description: { type: string }
-        category: { type: string }
-        receipt_url: { type: string }
-        expense_status: { type: string }
-        expense_date: { type: string, format: date }
-        submitted_at: { type: string, format: date-time }
-        processed_at: { type: string, format: date-time, nullable: true }
+        id: 
+          type: integer
+          description: Unique expense ID
+          example: 1
+        user_id: 
+          type: integer
+          description: ID of user who created the expense
+          example: 2
+        amount_idr: 
+          type: integer
+          description: Amount in Indonesian Rupiah
+          example: 50000
+        description: 
+          type: string
+          description: Expense description
+          example: "Makan siang dengan klien"
+        category: 
+          type: string
+          description: Expense category
+          example: "makan"
+        expense_status: 
+          type: string
+          description: Current status of the expense
+          enum: ["pending_approval", "approved", "rejected"]
+          example: "approved"
+        expense_date: 
+          type: string
+          format: date-time
+          description: Date when the expense occurred
+          example: "2025-09-11T00:00:00Z"
+        submitted_at: 
+          type: string
+          format: date-time
+          description: When the expense was submitted
+          example: "2025-09-11T19:47:49.669+07:00"
+        processed_at: 
+          type: string
+          format: date-time
+          nullable: true
+          description: When the expense was processed (approved/rejected)
+          example: "2025-09-11T19:47:49.669+07:00"
+        created_at: 
+          type: string
+          format: date-time
+          description: When the record was created
+          example: "2025-09-11T19:47:49.669+07:00"
+        updated_at: 
+          type: string
+          format: date-time
+          description: When the record was last updated
+          example: "2025-09-11T19:47:49.669+07:00"
     ApprovalRequest:
       type: object
       properties:
@@ -246,6 +298,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/PagedExpenses'
 
+  /expenses/pending:
+    get:
+      summary: Get pending approval expenses (manager only)
+      operationId: GetPendingApprovals
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: pending expenses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expenses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Expense'
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '403':
+          description: Forbidden - manager access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /expenses/{id}:
     get:
       summary: Get expense
@@ -293,7 +386,7 @@ paths:
           description: uploaded
 
   /expenses/{id}/approve:
-    put:
+    patch:
       summary: Approve expense
       operationId: ApproveExpense
       security:
@@ -316,10 +409,32 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Expense'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: approved
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - manager access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /expenses/{id}/reject:
-    put:
+    patch:
       summary: Reject expense
       operationId: RejectExpense
       security:
@@ -331,18 +446,45 @@ paths:
           schema:
             type: integer
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApprovalRequest'
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  example: "Insufficient documentation provided"
       responses:
         '200':
           description: rejected
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Expense'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: rejected
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - manager access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /expenses/{id}/payment/retry:
     post:

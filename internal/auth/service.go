@@ -13,6 +13,7 @@ import (
 
 type UserRepository interface {
 	GetPasswordForUsername(username string) (passwordHash string, userID string, err error)
+	GetUserWithPermissions(userID int64) (*User, error)
 }
 
 // Service is the main auth service with dependencies
@@ -22,20 +23,20 @@ type Service struct {
 	bcryptCost     int
 }
 
-func NewService(userRepo UserRepository, tokenGen TokenGenerator) *Service {
+func NewService(userRepo UserRepository, tokenGen TokenGenerator, bcryptCost int) *Service {
 	return &Service{
 		userRepo:       userRepo,
 		tokenGenerator: tokenGen,
-		bcryptCost:     bcrypt.DefaultCost,
+		bcryptCost:     bcryptCost,
 	}
 }
 
-func NewJWTTokenGenerator(accessSecret, refreshSecret string) *JWTTokenGenerator {
+func NewJWTTokenGenerator(accessSecret, refreshSecret string, accessTTL, refreshTTL time.Duration) *JWTTokenGenerator {
 	return &JWTTokenGenerator{
 		AccessTokenSecret:  []byte(accessSecret),
 		RefreshTokenSecret: []byte(refreshSecret),
-		AccessTokenTTL:     15 * time.Minute,   // Short-lived access token
-		RefreshTokenTTL:    24 * 7 * time.Hour, // 7 days refresh token
+		AccessTokenTTL:     accessTTL,
+		RefreshTokenTTL:    refreshTTL,
 	}
 }
 
@@ -99,6 +100,10 @@ func (s *Service) RefreshTokens(refreshToken string) (AuthTokens, error) {
 
 func (s *Service) ValidateAccessToken(tokenString string) (*Claims, error) {
 	return s.tokenGenerator.ValidateToken(tokenString)
+}
+
+func (s *Service) GetUserWithPermissions(userID int64) (*User, error) {
+	return s.userRepo.GetUserWithPermissions(userID)
 }
 
 func (j *JWTTokenGenerator) GenerateAccessToken(userID string, email string) (string, error) {

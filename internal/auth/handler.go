@@ -147,9 +147,13 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 				h.Logger.Warn("failed to parse user id from token claims", "value", claims.UserID, "error", perr)
 			}
 		}
-		coreUser := &User{
-			ID:    uid,
-			Email: claims.Email,
+
+		// Load user with permissions from database
+		coreUser, err := h.Service.GetUserWithPermissions(uid)
+		if err != nil {
+			h.Logger.Error("auth middleware: failed to load user permissions", "user_id", uid, "error", err)
+			h.WriteError(w, http.StatusUnauthorized, "user not found")
+			return
 		}
 
 		h.Logger.Info("auth middleware: adding user to context", "user_id", uid, "email", claims.Email)

@@ -5,12 +5,14 @@ import (
 	"net/http"
 
 	"github.com/frahmantamala/expense-management/internal/auth"
+	"github.com/frahmantamala/expense-management/internal/expense"
+	"github.com/frahmantamala/expense-management/internal/transport/middleware"
 	"github.com/frahmantamala/expense-management/internal/transport/swagger"
 	"github.com/frahmantamala/expense-management/internal/user"
 	"github.com/go-chi/chi"
 )
 
-func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler) {
+func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler) {
 	healthHandler := NewHealthHandler(db)
 	// Serve OpenAPI spec at root (outside API prefix)
 	router.Get("/openapi.yml", func(w http.ResponseWriter, r *http.Request) {
@@ -32,10 +34,34 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 				sr.Post("/refresh", authHandler.RefreshToken)
 				sr.Post("/logout", authHandler.Logout)
 			})
-			// Current user
-			if userHandler != nil {
-				r.With(authHandler.AuthMiddleware).Get("/users/me", userHandler.GetCurrentUser)
-			}
+
+			// Protected routes that require authentication
+			r.Group(func(pr chi.Router) {
+				pr.Use(authHandler.AuthMiddleware)
+
+				// Current user
+				if userHandler != nil {
+					pr.Get("/users/me", userHandler.GetCurrentUser)
+				}
+
+				// Expense routes
+				if expenseHandler != nil {
+					pr.Route("/expenses", func(er chi.Router) {
+						// User expense routes
+						er.Post("/", expenseHandler.CreateExpense)  // POST /expenses
+						er.Get("/", expenseHandler.GetUserExpenses) // GET /expenses (user's own)
+						er.Get("/{id}", expenseHandler.GetExpense)  // GET /expenses/:id
+
+						// Manager routes with permission protection
+						er.Group(func(mr chi.Router) {
+							mr.Use(middleware.RequirePermissions("approve_expenses", "reject_expenses", "manager", "admin"))
+							mr.Get("/pending", expenseHandler.GetPendingApprovals)   // GET /expenses/pending
+							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense) // PATCH /expenses/:id/approve
+							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)   // PATCH /expenses/:id/reject
+						})
+					})
+				}
+			})
 		}
 	})
 }

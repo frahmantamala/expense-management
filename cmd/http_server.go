@@ -13,6 +13,8 @@ import (
 	"github.com/frahmantamala/expense-management/internal"
 	auth "github.com/frahmantamala/expense-management/internal/auth"
 	authPostgres "github.com/frahmantamala/expense-management/internal/auth/postgres"
+	"github.com/frahmantamala/expense-management/internal/expense"
+	expensePostgres "github.com/frahmantamala/expense-management/internal/expense/postgres"
 	"github.com/frahmantamala/expense-management/internal/transport/rest"
 	user "github.com/frahmantamala/expense-management/internal/user"
 	userpostgres "github.com/frahmantamala/expense-management/internal/user/postgres"
@@ -38,13 +40,14 @@ var httpServerCmd = &cobra.Command{
 }
 
 type Dependencies struct {
-	Config        *internal.Config
-	DB            *gorm.DB
-	Router        *chi.Mux
-	HealthChecker *rest.HealthHandler
-	Logger        *slog.Logger
-	AuthHandler   *auth.Handler
-	UserHandler   *user.Handler
+	Config         *internal.Config
+	DB             *gorm.DB
+	Router         *chi.Mux
+	HealthChecker  *rest.HealthHandler
+	Logger         *slog.Logger
+	AuthHandler    *auth.Handler
+	UserHandler    *user.Handler
+	ExpenseHandler *expense.Handler
 }
 
 func startHTTPServer() {
@@ -84,7 +87,7 @@ func startHTTPServer() {
 		if err := server.Shutdown(ctx); err != nil {
 			slog.Error("Server shutdown error", "error", err)
 		}
-		// close underlying sql.DB from gorm
+
 		if sqlDB, err := deps.DB.DB(); err == nil {
 			if err := sqlDB.Close(); err != nil {
 				slog.Error("Database close error", "error", err)
@@ -103,25 +106,23 @@ func startHTTPServer() {
 }
 
 func setupRoutes(deps *Dependencies) {
-	// Add middlewares: defensive recover and CORS first
 	deps.Router.Use(cors.CORS)
 	deps.Router.Use(middleware.RequestID)
-	deps.Router.Use(loggingMiddleware.LoggingMiddleware(deps.Logger)) // Add custom logging middleware
+	deps.Router.Use(loggingMiddleware.LoggingMiddleware(deps.Logger))
 	deps.Router.Use(middleware.Recoverer)
 
-	// Use GORM-based auth repo
 	authRepo := authPostgres.NewRepository(deps.DB)
 
-	// Token secrets come from Security config
 	tokenGen := auth.NewJWTTokenGenerator(
 		deps.Config.Security.SessionSecret,
 		deps.Config.Security.SessionSecret,
+		deps.Config.Security.AccessTokenDuration,
+		deps.Config.Security.RefreshTokenDuration,
 	)
 
-	authService := auth.NewService(authRepo, tokenGen)
+	authService := auth.NewService(authRepo, tokenGen, deps.Config.Security.BCryptCost)
 	authHandler := auth.NewHandler(authService)
 
-	// Set auth handler in dependencies
 	deps.AuthHandler = authHandler
 
 	// user repo/service/handler
@@ -130,9 +131,14 @@ func setupRoutes(deps *Dependencies) {
 	userHandler := user.NewHandler(userSvc)
 	deps.UserHandler = userHandler
 
-	// Register health endpoint and other routes. Pass underlying *sql.DB to the router.
+	// expense repo/service/handler
+	expenseRepo := expensePostgres.NewExpenseRepository(deps.DB)
+	expenseService := expense.NewService(expenseRepo, deps.Logger)
+	expenseHandler := expense.NewHandler(expenseService)
+	deps.ExpenseHandler = expenseHandler
+
 	sqlDBForRoutes, _ := deps.DB.DB()
-	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler)
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler, deps.ExpenseHandler)
 }
 
 func initializeDependencies() (*Dependencies, error) {
@@ -147,7 +153,6 @@ func initializeDependencies() (*Dependencies, error) {
 	}
 
 	router := chi.NewRouter()
-	// get underlying *sql.DB for health checks
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sql DB from gorm: %w", err)
@@ -165,7 +170,6 @@ func initializeDependencies() (*Dependencies, error) {
 
 // initDB initializes the database connection
 func initDB(cfg internal.DatabaseConfig) (*gorm.DB, error) {
-	// open gorm db using postgres driver
 	gormDB, err := gorm.Open(postgres.Open(cfg.Source), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open gorm db: %w", err)
@@ -179,7 +183,6 @@ func initDB(cfg internal.DatabaseConfig) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 
-	// verify connection; close underlying *sql.DB on failure
 	if err := sqlDB.Ping(); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
