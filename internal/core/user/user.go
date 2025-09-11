@@ -9,6 +9,7 @@ type User struct {
 	PasswordHash string
 	Department   string
 	IsActive     bool
+	Permissions  []map[string]string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

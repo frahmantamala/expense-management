@@ -14,9 +14,12 @@ import (
 	auth "github.com/frahmantamala/expense-management/internal/auth"
 	authPostgres "github.com/frahmantamala/expense-management/internal/auth/postgres"
 	"github.com/frahmantamala/expense-management/internal/transport/rest"
+	user "github.com/frahmantamala/expense-management/internal/user"
+	userpostgres "github.com/frahmantamala/expense-management/internal/user/postgres"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 
 	cors "github.com/frahmantamala/expense-management/internal/transport/middleware"
+	loggingMiddleware "github.com/frahmantamala/expense-management/internal/transport/middleware"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -41,6 +44,7 @@ type Dependencies struct {
 	HealthChecker *rest.HealthHandler
 	Logger        *slog.Logger
 	AuthHandler   *auth.Handler
+	UserHandler   *user.Handler
 }
 
 func startHTTPServer() {
@@ -102,7 +106,7 @@ func setupRoutes(deps *Dependencies) {
 	// Add middlewares: defensive recover and CORS first
 	deps.Router.Use(cors.CORS)
 	deps.Router.Use(middleware.RequestID)
-	deps.Router.Use(middleware.Logger)
+	deps.Router.Use(loggingMiddleware.LoggingMiddleware(deps.Logger)) // Add custom logging middleware
 	deps.Router.Use(middleware.Recoverer)
 
 	// Use GORM-based auth repo
@@ -120,9 +124,15 @@ func setupRoutes(deps *Dependencies) {
 	// Set auth handler in dependencies
 	deps.AuthHandler = authHandler
 
+	// user repo/service/handler
+	userRepo := userpostgres.NewRepository(deps.DB)
+	userSvc := user.NewService(userRepo)
+	userHandler := user.NewHandler(userSvc)
+	deps.UserHandler = userHandler
+
 	// Register health endpoint and other routes. Pass underlying *sql.DB to the router.
 	sqlDBForRoutes, _ := deps.DB.DB()
-	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler)
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler)
 }
 
 func initializeDependencies() (*Dependencies, error) {

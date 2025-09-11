@@ -1,48 +1,61 @@
-package user
+package postgres
 
-// import (
-// 	"context"
-// 	"database/sql"
-// 	"fmt"
+import (
+	"database/sql"
+	"strings"
 
-// 	"github.com/jmoiron/sqlx"
-// )
+	"github.com/frahmantamala/expense-management/internal/user"
+	"gorm.io/gorm"
+)
 
-// type Repository interface {
-// 	HasPermission(ctx context.Context, userID int64, permission string) (bool, error)
-// 	GetByID(ctx context.Context, id int64) (*User, error)
-// }
+type Repository struct {
+	db *gorm.DB
+}
 
-// func NewPostgresRepo(db *sqlx.DB) Repository {
-// 	return &pgRepo{db: db}
-// }
+func NewRepository(db *gorm.DB) *Repository {
+	return &Repository{db: db}
+}
 
-// type pgRepo struct {
-// 	db *sqlx.DB
-// }
+func (r *Repository) GetByID(userID int64) (*user.User, error) {
+	var u user.User
+	var department sql.NullString
 
-// func (p *pgRepo) HasPermission(ctx context.Context, userID int64, permission string) (bool, error) {
-// 	var exists bool
-// 	query := `
-// SELECT EXISTS(
-//   SELECT 1 FROM user_permissions up
-//   JOIN permissions p ON up.permission_id = p.id
-//   WHERE up.user_id = $1 AND p.name = $2
-// )
-// `
-// 	if err := p.db.GetContext(ctx, &exists, query, userID, permission); err != nil {
-// 		return false, fmt.Errorf("haspermission query: %w", err)
-// 	}
-// 	return exists, nil
-// }
+	query := `SELECT id, email, name, department, is_active, password_hash, created_at, updated_at
+			  FROM users WHERE id = ? AND is_active = true`
 
-// func (p *pgRepo) GetByID(ctx context.Context, id int64) (*User, error) {
-// 	var u User
-// 	if err := p.db.GetContext(ctx, &u, "SELECT id, email, name, department, is_active, created_at, updated_at FROM users WHERE id = $1", id); err != nil {
-// 		if err == sql.ErrNoRows {
-// 			return nil, sql.ErrNoRows
-// 		}
-// 		return nil, err
-// 	}
-// 	return &u, nil
-// }
+	row := r.db.Raw(query, userID).Row()
+	if err := row.Scan(&u.ID, &u.Email, &u.Name, &department, &u.IsActive, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows || err == gorm.ErrRecordNotFound {
+			return nil, user.ErrNotFound
+		}
+		return nil, err
+	}
+
+	// Handle nullable department field
+	u.Department = department.String
+
+	return &u, nil
+}
+
+func (r *Repository) GetPermissions(userID int64) ([]string, error) {
+	query := `SELECT p.name
+			  FROM permissions p
+			  JOIN user_permissions up ON p.id = up.permission_id
+			  WHERE up.user_id = ?`
+
+	rows, err := r.db.Raw(query, userID).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var permissions []string
+	for rows.Next() {
+		var perm string
+		if err := rows.Scan(&perm); err != nil {
+			return nil, err
+		}
+		permissions = append(permissions, strings.TrimSpace(perm))
+	}
+	return permissions, nil
+}

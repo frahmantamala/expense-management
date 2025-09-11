@@ -13,7 +13,6 @@ import (
 
 type UserRepository interface {
 	GetPasswordForUsername(username string) (passwordHash string, userID string, err error)
-	GetUserByID(userID string) (int64, error)
 }
 
 // Service is the main auth service with dependencies
@@ -23,7 +22,6 @@ type Service struct {
 	bcryptCost     int
 }
 
-// NewService creates a new auth service
 func NewService(userRepo UserRepository, tokenGen TokenGenerator) *Service {
 	return &Service{
 		userRepo:       userRepo,
@@ -32,7 +30,6 @@ func NewService(userRepo UserRepository, tokenGen TokenGenerator) *Service {
 	}
 }
 
-// NewJWTTokenGenerator creates a new JWT token generator
 func NewJWTTokenGenerator(accessSecret, refreshSecret string) *JWTTokenGenerator {
 	return &JWTTokenGenerator{
 		AccessTokenSecret:  []byte(accessSecret),
@@ -42,7 +39,6 @@ func NewJWTTokenGenerator(accessSecret, refreshSecret string) *JWTTokenGenerator
 	}
 }
 
-// Authenticate validates credentials and returns tokens
 func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
 	// Validate input
 	if err := dto.Validate(); err != nil {
@@ -60,13 +56,13 @@ func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
 		return AuthTokens{}, ErrInvalidCredentials
 	}
 
-	// Generate tokens
-	accessToken, err := s.tokenGenerator.GenerateAccessToken(userID)
+	// Generate tokens with email included
+	accessToken, err := s.tokenGenerator.GenerateAccessToken(userID, dto.Email)
 	if err != nil {
 		return AuthTokens{}, err
 	}
 
-	refreshToken, err := s.tokenGenerator.GenerateRefreshToken(userID)
+	refreshToken, err := s.tokenGenerator.GenerateRefreshToken(userID, dto.Email)
 	if err != nil {
 		return AuthTokens{}, err
 	}
@@ -77,7 +73,6 @@ func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
 	}, nil
 }
 
-// RefreshTokens validates refresh token and returns new tokens
 func (s *Service) RefreshTokens(refreshToken string) (AuthTokens, error) {
 	// Validate refresh token
 	claims, err := s.tokenGenerator.ValidateToken(refreshToken)
@@ -85,17 +80,13 @@ func (s *Service) RefreshTokens(refreshToken string) (AuthTokens, error) {
 		return AuthTokens{}, err
 	}
 
+	// Generate new tokens with email from existing claims
+	accessToken, err := s.tokenGenerator.GenerateAccessToken(claims.UserID, claims.Email)
 	if err != nil {
 		return AuthTokens{}, err
 	}
 
-	// Generate new tokens
-	accessToken, err := s.tokenGenerator.GenerateAccessToken(claims.UserID)
-	if err != nil {
-		return AuthTokens{}, err
-	}
-
-	newRefreshToken, err := s.tokenGenerator.GenerateRefreshToken(claims.UserID)
+	newRefreshToken, err := s.tokenGenerator.GenerateRefreshToken(claims.UserID, claims.Email)
 	if err != nil {
 		return AuthTokens{}, err
 	}
@@ -106,17 +97,16 @@ func (s *Service) RefreshTokens(refreshToken string) (AuthTokens, error) {
 	}, nil
 }
 
-// ValidateAccessToken validates access token and returns claims
 func (s *Service) ValidateAccessToken(tokenString string) (*Claims, error) {
 	return s.tokenGenerator.ValidateToken(tokenString)
 }
 
-// GenerateAccessToken creates a new access token
-func (j *JWTTokenGenerator) GenerateAccessToken(userID string) (string, error) {
+func (j *JWTTokenGenerator) GenerateAccessToken(userID string, email string) (string, error) {
 	expiresAt := time.Now().Add(j.AccessTokenTTL)
 
 	claims := &Claims{
 		UserID: userID,
+		Email:  email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -133,12 +123,12 @@ func (j *JWTTokenGenerator) GenerateAccessToken(userID string) (string, error) {
 	return tokenString, nil
 }
 
-// GenerateRefreshToken creates a new refresh token
-func (j *JWTTokenGenerator) GenerateRefreshToken(userID string) (string, error) {
+func (j *JWTTokenGenerator) GenerateRefreshToken(userID string, email string) (string, error) {
 	expiresAt := time.Now().Add(j.RefreshTokenTTL)
 
 	claims := &Claims{
 		UserID: userID,
+		Email:  email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -155,7 +145,6 @@ func (j *JWTTokenGenerator) GenerateRefreshToken(userID string) (string, error) 
 	return tokenString, nil
 }
 
-// ValidateToken validates a JWT token and returns claims
 func (j *JWTTokenGenerator) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Check signing method
@@ -187,7 +176,6 @@ func (j *JWTTokenGenerator) ValidateToken(tokenString string) (*Claims, error) {
 	return nil, ErrInvalidToken
 }
 
-// HashPassword creates a bcrypt hash of the password
 func (s *Service) HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
 	if err != nil {
@@ -196,7 +184,6 @@ func (s *Service) HashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
-// GenerateRandomToken generates a cryptographically secure random token
 func GenerateRandomToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {

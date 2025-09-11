@@ -14,13 +14,19 @@ type AuthInfo struct {
 	ExpiresAt time.Time
 }
 
+type User struct {
+	ID          int64    `json:"id"`
+	Email       string   `json:"email"`
+	Permissions []string `json:"permissions,omitempty"`
+}
+
 type AuthResponseV1 struct {
 	ID    string `json:"id"`
 	Token string `json:"token"`
 }
 
 type UserInfo struct {
-	ID          string    `db:"id"`
+	ID          int64     `db:"id"`
 	Email       string    `db:"email"`
 	Name        string    `db:"name"`
 	Department  string    `db:"department"`
@@ -32,8 +38,8 @@ type UserInfo struct {
 
 // TokenGenerator creates tokens and expiration times.
 type TokenGenerator interface {
-	GenerateAccessToken(userID string) (token string, err error)
-	GenerateRefreshToken(userID string) (token string, err error)
+	GenerateAccessToken(userID string, email string) (token string, err error)
+	GenerateRefreshToken(userID string, email string) (token string, err error)
 	ValidateToken(tokenString string) (*Claims, error)
 }
 

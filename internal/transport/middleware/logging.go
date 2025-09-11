@@ -1,0 +1,221 @@
+package middleware
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/middleware"
+)
+
+// sensitiveFields are field names that should be filtered from logs
+var sensitiveFields = []string{
+	"password",
+	"password_hash",
+	"token",
+	"access_token",
+	"refresh_token",
+	"authorization",
+	"secret",
+	"key",
+	"api_key",
+	"session",
+	"credential",
+	"auth",
+}
+
+// LoggingMiddleware creates a middleware that logs requests and responses with sensitive data filtering
+func LoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			// Get request ID from context if available
+			reqID := middleware.GetReqID(r.Context())
+
+			// Log incoming request
+			logRequest(logger, r, reqID)
+
+			// Wrap response writer to capture response data
+			ww := &responseWriter{
+				ResponseWriter: w,
+				body:           &bytes.Buffer{},
+			}
+
+			// Process request
+			next.ServeHTTP(ww, r)
+
+			// Log response
+			duration := time.Since(start)
+			logResponse(logger, ww, duration, reqID)
+		})
+	}
+}
+
+// responseWriter wraps http.ResponseWriter to capture response body
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	body       *bytes.Buffer
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	// Write to both the actual response and our buffer
+	rw.body.Write(b)
+	return rw.ResponseWriter.Write(b)
+}
+
+// logRequest logs the incoming HTTP request with sensitive data filtered
+func logRequest(logger *slog.Logger, r *http.Request, reqID string) {
+	// Read and restore request body
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	// Filter sensitive data from headers
+	headers := filterSensitiveHeaders(r.Header)
+
+	// Filter sensitive data from body
+	filteredBody := filterSensitiveBody(bodyBytes)
+
+	logger.Info("incoming request",
+		"request_id", reqID,
+		"method", r.Method,
+		"path", r.URL.Path,
+		"query", r.URL.RawQuery,
+		"remote_addr", r.RemoteAddr,
+		"user_agent", r.UserAgent(),
+		"headers", headers,
+		"body", filteredBody,
+	)
+}
+
+// logResponse logs the HTTP response with sensitive data filtered
+func logResponse(logger *slog.Logger, rw *responseWriter, duration time.Duration, reqID string) {
+	statusCode := rw.statusCode
+	if statusCode == 0 {
+		statusCode = 200 // Default if WriteHeader wasn't called
+	}
+
+	// Filter sensitive data from response body
+	filteredBody := filterSensitiveBody(rw.body.Bytes())
+
+	// Determine log level based on status code
+	logLevel := slog.LevelInfo
+	if statusCode >= 400 && statusCode < 500 {
+		logLevel = slog.LevelWarn
+	} else if statusCode >= 500 {
+		logLevel = slog.LevelError
+	}
+
+	logger.Log(nil, logLevel, "response",
+		"request_id", reqID,
+		"status_code", statusCode,
+		"duration_ms", duration.Milliseconds(),
+		"response_size", rw.body.Len(),
+		"body", filteredBody,
+	)
+}
+
+// filterSensitiveHeaders removes or masks sensitive headers
+func filterSensitiveHeaders(headers http.Header) map[string]string {
+	filtered := make(map[string]string)
+
+	for name, values := range headers {
+		lowerName := strings.ToLower(name)
+
+		// Check if header contains sensitive data
+		isSensitive := false
+		for _, sensitiveField := range sensitiveFields {
+			if strings.Contains(lowerName, sensitiveField) {
+				isSensitive = true
+				break
+			}
+		}
+
+		if isSensitive {
+			filtered[name] = "[FILTERED]"
+		} else {
+			filtered[name] = strings.Join(values, ", ")
+		}
+	}
+
+	return filtered
+}
+
+// filterSensitiveBody removes or masks sensitive fields from JSON body
+func filterSensitiveBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+
+	// Try to parse as JSON
+	var jsonData interface{}
+	if err := json.Unmarshal(body, &jsonData); err != nil {
+		// If not JSON, return as string but check for sensitive patterns
+		bodyStr := string(body)
+		for _, sensitiveField := range sensitiveFields {
+			if strings.Contains(strings.ToLower(bodyStr), sensitiveField) {
+				return "[FILTERED - Contains sensitive data]"
+			}
+		}
+		return bodyStr
+	}
+
+	// Filter sensitive fields from JSON
+	filtered := filterSensitiveJSON(jsonData)
+
+	// Convert back to JSON string
+	filteredBytes, err := json.Marshal(filtered)
+	if err != nil {
+		return "[ERROR - Failed to marshal filtered JSON]"
+	}
+
+	return string(filteredBytes)
+}
+
+// filterSensitiveJSON recursively filters sensitive fields from JSON data
+func filterSensitiveJSON(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		filtered := make(map[string]interface{})
+		for key, value := range v {
+			lowerKey := strings.ToLower(key)
+
+			// Check if key is sensitive
+			isSensitive := false
+			for _, sensitiveField := range sensitiveFields {
+				if strings.Contains(lowerKey, sensitiveField) {
+					isSensitive = true
+					break
+				}
+			}
+
+			if isSensitive {
+				filtered[key] = "[FILTERED]"
+			} else {
+				filtered[key] = filterSensitiveJSON(value)
+			}
+		}
+		return filtered
+	case []interface{}:
+		filtered := make([]interface{}, len(v))
+		for i, item := range v {
+			filtered[i] = filterSensitiveJSON(item)
+		}
+		return filtered
+	default:
+		return v
+	}
+}

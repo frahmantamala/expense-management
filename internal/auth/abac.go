@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/frahmantamala/expense-management/internal/core/user"
 	"github.com/go-chi/chi"
 	"github.com/jmoiron/sqlx"
 )
@@ -21,8 +20,8 @@ const ContextUserKey ctxKey = "user"
 var ErrForbidden = errors.New("forbidden")
 
 // UserFromContext extracts the authenticated user placed in request context by auth middleware.
-func UserFromContext(ctx context.Context) (*user.User, bool) {
-	u, ok := ctx.Value(ContextUserKey).(*user.User)
+func UserFromContext(ctx context.Context) (*User, bool) {
+	u, ok := ctx.Value(ContextUserKey).(*User)
 	return u, ok
 }
 
@@ -68,7 +67,7 @@ func (p *ABACPolicy) Allow(userAttrs map[string]string, resourceOwnerID string, 
 }
 
 // CanViewExpense checks whether the user can view the expense owned by ownerID.
-func (p *ABACPolicy) CanViewExpense(u *user.User, ownerID int64) error {
+func (p *ABACPolicy) CanViewExpense(u *User, ownerID int64) error {
 	attrs := extractUserAttributes(u)
 	if attrs["user_id"] == "" {
 		return ErrForbidden
@@ -82,7 +81,7 @@ func (p *ABACPolicy) CanViewExpense(u *user.User, ownerID int64) error {
 }
 
 // CanApproveExpense checks whether the user can approve expenses
-func (p *ABACPolicy) CanApproveExpense(u *user.User, expenseUserID int64) error {
+func (p *ABACPolicy) CanApproveExpense(u *User, expenseUserID int64) error {
 	attrs := extractUserAttributes(u)
 	if attrs["user_id"] == "" {
 		return ErrForbidden
@@ -96,7 +95,7 @@ func (p *ABACPolicy) CanApproveExpense(u *user.User, expenseUserID int64) error 
 }
 
 // Enhanced user attribute extraction
-func extractUserAttributes(u *user.User) map[string]string {
+func extractUserAttributes(u *User) map[string]string {
 	if u == nil {
 		return map[string]string{}
 	}
@@ -139,7 +138,7 @@ func extractUserAttributes(u *user.User) map[string]string {
 	return attrs
 }
 
-func extractUserID(u *user.User) string {
+func extractUserID(u *User) string {
 	if u == nil {
 		return ""
 	}
@@ -169,7 +168,7 @@ func extractUserID(u *user.User) string {
 }
 
 // RequireABAC is a generic middleware wrapper that runs an ABAC check function.
-func RequireABAC(abac *ABACPolicy, check func(a *ABACPolicy, u *user.User, r *http.Request) error) func(next http.Handler) http.Handler {
+func RequireABAC(abac *ABACPolicy, check func(a *ABACPolicy, u *User, r *http.Request) error) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			u, ok := UserFromContext(r.Context())
@@ -192,7 +191,7 @@ func RequireABAC(abac *ABACPolicy, check func(a *ABACPolicy, u *user.User, r *ht
 
 // RequireCanViewExpense builds a middleware that checks if the authenticated user can view the expense.
 func RequireCanViewExpense(db *sqlx.DB, abac *ABACPolicy) func(next http.Handler) http.Handler {
-	return RequireABAC(abac, func(a *ABACPolicy, u *user.User, r *http.Request) error {
+	return RequireABAC(abac, func(a *ABACPolicy, u *User, r *http.Request) error {
 		idStr := chi.URLParam(r, "id")
 		if idStr == "" {
 			return ErrForbidden
@@ -216,7 +215,7 @@ func RequireCanViewExpense(db *sqlx.DB, abac *ABACPolicy) func(next http.Handler
 
 // RequireCanApproveExpense builds a middleware that checks if the user can approve expenses.
 func RequireCanApproveExpense(db *sqlx.DB, abac *ABACPolicy) func(next http.Handler) http.Handler {
-	return RequireABAC(abac, func(a *ABACPolicy, u *user.User, r *http.Request) error {
+	return RequireABAC(abac, func(a *ABACPolicy, u *User, r *http.Request) error {
 		idStr := chi.URLParam(r, "id")
 		if idStr == "" {
 			return ErrForbidden
