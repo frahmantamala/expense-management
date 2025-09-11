@@ -19,7 +19,6 @@ const ContextUserKey ctxKey = "user"
 
 var ErrForbidden = errors.New("forbidden")
 
-// UserFromContext extracts the authenticated user placed in request context by auth middleware.
 func UserFromContext(ctx context.Context) (*User, bool) {
 	u, ok := ctx.Value(ContextUserKey).(*User)
 	return u, ok
@@ -28,14 +27,11 @@ func UserFromContext(ctx context.Context) (*User, bool) {
 // ABACPolicy is a small attribute-based access control helper.
 type ABACPolicy struct{}
 
-// Allow evaluates whether the action on a resource is permitted given attrs.
 func (p *ABACPolicy) Allow(userAttrs map[string]string, resourceOwnerID string, action string) bool {
-	// Admin users can do everything
 	if attr, ok := userAttrs["attributes"]; ok && attr == "admin" {
 		return true
 	}
 
-	// Backwards compatible: role-based
 	if role, ok := userAttrs["role"]; ok && role == "admin" {
 		return true
 	}

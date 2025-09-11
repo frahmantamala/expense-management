@@ -15,6 +15,7 @@ import (
 	authPostgres "github.com/frahmantamala/expense-management/internal/auth/postgres"
 	"github.com/frahmantamala/expense-management/internal/expense"
 	expensePostgres "github.com/frahmantamala/expense-management/internal/expense/postgres"
+	"github.com/frahmantamala/expense-management/internal/payment"
 	"github.com/frahmantamala/expense-management/internal/transport/rest"
 	user "github.com/frahmantamala/expense-management/internal/user"
 	userpostgres "github.com/frahmantamala/expense-management/internal/user/postgres"
@@ -133,7 +134,12 @@ func setupRoutes(deps *Dependencies) {
 
 	// expense repo/service/handler
 	expenseRepo := expensePostgres.NewExpenseRepository(deps.DB)
-	expenseService := expense.NewService(expenseRepo, deps.Logger)
+
+	// payment service
+	paymentService := payment.NewPaymentService(deps.Config.Payment.MockAPIURL, deps.Logger)
+	paymentProcessor := payment.NewExpensePaymentProcessor(paymentService, deps.Logger)
+
+	expenseService := expense.NewService(expenseRepo, paymentProcessor, deps.Logger)
 	expenseHandler := expense.NewHandler(expenseService)
 	deps.ExpenseHandler = expenseHandler
 

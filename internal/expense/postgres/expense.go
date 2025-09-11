@@ -73,3 +73,21 @@ func (r *ExpenseRepository) UpdateStatus(id int64, status string, processedAt ti
 			"updated_at":     time.Now(),
 		}).Error
 }
+
+// UpdatePaymentInfo updates payment-related fields of an expense
+func (r *ExpenseRepository) UpdatePaymentInfo(id int64, paymentStatus, paymentID, paymentExternalID string, paidAt *time.Time) error {
+	updates := map[string]interface{}{
+		"payment_status":      paymentStatus,
+		"payment_id":          paymentID,
+		"payment_external_id": paymentExternalID,
+		"updated_at":          time.Now(),
+	}
+
+	if paidAt != nil {
+		updates["paid_at"] = *paidAt
+	}
+
+	return r.db.Model(&expense.Expense{}).
+		Where("id = ?", id).
+		Updates(updates).Error
+}

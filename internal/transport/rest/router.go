@@ -55,9 +55,10 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 						// Manager routes with permission protection
 						er.Group(func(mr chi.Router) {
 							mr.Use(middleware.RequirePermissions("approve_expenses", "reject_expenses", "manager", "admin"))
-							mr.Get("/pending", expenseHandler.GetPendingApprovals)   // GET /expenses/pending
-							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense) // PATCH /expenses/:id/approve
-							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)   // PATCH /expenses/:id/reject
+							mr.Get("/pending", expenseHandler.GetPendingApprovals)      // GET /expenses/pending
+							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense)    // PATCH /expenses/:id/approve
+							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)      // PATCH /expenses/:id/reject
+							mr.Post("/{id}/payment/retry", expenseHandler.RetryPayment) // POST /expenses/:id/payment/retry
 						})
 					})
 				}

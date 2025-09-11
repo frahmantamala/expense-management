@@ -7,19 +7,23 @@ import (
 
 // Expense represents the main expense entity
 type Expense struct {
-	ID              int64      `json:"id" gorm:"primaryKey"`
-	UserID          int64      `json:"user_id" gorm:"column:user_id;not null"`
-	AmountIDR       int64      `json:"amount_idr" gorm:"column:amount_idr;not null"`
-	Description     string     `json:"description" gorm:"not null"`
-	Category        string     `json:"category"`
-	ReceiptURL      *string    `json:"receipt_url,omitempty" gorm:"column:receipt_url"`
-	ReceiptFileName *string    `json:"receipt_filename,omitempty" gorm:"column:receipt_filename"`
-	ExpenseStatus   string     `json:"expense_status" gorm:"column:expense_status;default:pending_approval"`
-	ExpenseDate     time.Time  `json:"expense_date" gorm:"column:expense_date;type:date"`
-	SubmittedAt     time.Time  `json:"submitted_at" gorm:"column:submitted_at;default:now()"`
-	ProcessedAt     *time.Time `json:"processed_at,omitempty" gorm:"column:processed_at"`
-	CreatedAt       time.Time  `json:"created_at" gorm:"column:created_at;default:now()"`
-	UpdatedAt       time.Time  `json:"updated_at" gorm:"column:updated_at;default:now()"`
+	ID                int64      `json:"id" gorm:"primaryKey"`
+	UserID            int64      `json:"user_id" gorm:"column:user_id;not null"`
+	AmountIDR         int64      `json:"amount_idr" gorm:"column:amount_idr;not null"`
+	Description       string     `json:"description" gorm:"not null"`
+	Category          string     `json:"category"`
+	ReceiptURL        *string    `json:"receipt_url,omitempty" gorm:"column:receipt_url"`
+	ReceiptFileName   *string    `json:"receipt_filename,omitempty" gorm:"column:receipt_filename"`
+	ExpenseStatus     string     `json:"expense_status" gorm:"column:expense_status;default:pending_approval"`
+	PaymentStatus     *string    `json:"payment_status,omitempty" gorm:"column:payment_status"`
+	PaymentID         *string    `json:"payment_id,omitempty" gorm:"column:payment_id"`
+	PaymentExternalID *string    `json:"payment_external_id,omitempty" gorm:"column:payment_external_id"`
+	ExpenseDate       time.Time  `json:"expense_date" gorm:"column:expense_date;type:date"`
+	SubmittedAt       time.Time  `json:"submitted_at" gorm:"column:submitted_at;default:now()"`
+	ProcessedAt       *time.Time `json:"processed_at,omitempty" gorm:"column:processed_at"`
+	PaidAt            *time.Time `json:"paid_at,omitempty" gorm:"column:paid_at"`
+	CreatedAt         time.Time  `json:"created_at" gorm:"column:created_at;default:now()"`
+	UpdatedAt         time.Time  `json:"updated_at" gorm:"column:updated_at;default:now()"`
 }
 
 // TableName returns the table name for GORM
@@ -99,6 +103,14 @@ const (
 	ExpenseStatusPendingApproval = "pending_approval"
 	ExpenseStatusApproved        = "approved"
 	ExpenseStatusRejected        = "rejected"
+	ExpenseStatusAutoApproved    = "auto_approved"
+)
+
+// Payment status constants
+const (
+	PaymentStatusPending = "pending"
+	PaymentStatusSuccess = "success"
+	PaymentStatusFailed  = "failed"
 )
 
 // Auto-approval threshold (1M IDR)

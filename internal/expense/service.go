@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// PaymentProcessor interface defines payment processing methods
+type PaymentProcessor interface {
+	ProcessPayment(expenseID int64, amount int64) (paymentID, externalID string, err error)
+	RetryPayment(externalID string, amount int64) (paymentID string, err error)
+}
+
 // Repository interface defines the data access methods for expenses
 type Repository interface {
 	Create(expense *Expense) error
@@ -13,19 +19,22 @@ type Repository interface {
 	GetPendingApprovals(limit, offset int) ([]*Expense, error)
 	Update(expense *Expense) error
 	UpdateStatus(id int64, status string, processedAt time.Time) error
+	UpdatePaymentInfo(id int64, paymentStatus, paymentID, paymentExternalID string, paidAt *time.Time) error
 }
 
 // Service handles expense business logic
 type Service struct {
-	repo   Repository
-	logger *slog.Logger
+	repo             Repository
+	paymentProcessor PaymentProcessor
+	logger           *slog.Logger
 }
 
 // NewService creates a new expense service
-func NewService(repo Repository, logger *slog.Logger) *Service {
+func NewService(repo Repository, paymentProcessor PaymentProcessor, logger *slog.Logger) *Service {
 	return &Service{
-		repo:   repo,
-		logger: logger,
+		repo:             repo,
+		paymentProcessor: paymentProcessor,
+		logger:           logger,
 	}
 }
 
@@ -63,6 +72,15 @@ func (s *Service) CreateExpense(userID int64, dto CreateExpenseDTO) (*Expense, e
 	if err := s.repo.Create(expense); err != nil {
 		s.logger.Error("failed to create expense", "error", err, "user_id", userID)
 		return nil, err
+	}
+
+	// If expense is approved (auto-approved), trigger payment processing
+	if status == ExpenseStatusApproved {
+		s.logger.Info("expense auto-approved, triggering payment",
+			"expense_id", expense.ID,
+			"amount", expense.AmountIDR)
+
+		go s.processPaymentAsync(expense.ID, expense.AmountIDR)
 	}
 
 	s.logger.Info("expense created successfully",
@@ -156,6 +174,13 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 		"manager_id", managerID,
 		"amount", expense.AmountIDR)
 
+	// Trigger payment processing for approved expense
+	s.logger.Info("expense manually approved, triggering payment",
+		"expense_id", expenseID,
+		"amount", expense.AmountIDR)
+
+	go s.processPaymentAsync(expenseID, expense.AmountIDR)
+
 	return nil
 } // RejectExpense rejects an expense (manager only)
 func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userPermissions []string) error {
@@ -209,4 +234,75 @@ func (s *Service) hasManagerPermissions(userPermissions []string) bool {
 		}
 	}
 	return false
+}
+
+// processPaymentAsync processes payment for an approved expense asynchronously
+func (s *Service) processPaymentAsync(expenseID int64, amount int64) {
+	s.logger.Info("starting payment processing", "expense_id", expenseID, "amount", amount)
+
+	// Set initial payment status to pending
+	if err := s.repo.UpdatePaymentInfo(expenseID, PaymentStatusPending, "", "", nil); err != nil {
+		s.logger.Error("failed to set payment status to pending", "error", err, "expense_id", expenseID)
+		return
+	}
+
+	// Process payment through payment service
+	paymentID, externalID, err := s.paymentProcessor.ProcessPayment(expenseID, amount)
+	if err != nil {
+		s.logger.Error("payment processing failed", "error", err, "expense_id", expenseID)
+
+		// Update payment status to failed
+		if updateErr := s.repo.UpdatePaymentInfo(expenseID, PaymentStatusFailed, "", externalID, nil); updateErr != nil {
+			s.logger.Error("failed to update payment status to failed", "error", updateErr, "expense_id", expenseID)
+		}
+		return
+	}
+
+	// Payment succeeded, update status
+	paidAt := time.Now()
+	if err := s.repo.UpdatePaymentInfo(expenseID, PaymentStatusSuccess, paymentID, externalID, &paidAt); err != nil {
+		s.logger.Error("failed to update payment status to success", "error", err, "expense_id", expenseID)
+		return
+	}
+
+	s.logger.Info("payment processed successfully",
+		"expense_id", expenseID,
+		"payment_id", paymentID,
+		"external_id", externalID)
+}
+
+// RetryPayment retries payment for a failed expense payment
+func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error {
+	// Check permissions (managers can retry payments)
+	if !s.hasManagerPermissions(userPermissions) {
+		s.logger.Warn("user lacks manager permissions for payment retry", "expense_id", expenseID)
+		return ErrUnauthorizedAccess
+	}
+
+	// Get expense
+	expense, err := s.repo.GetByID(expenseID)
+	if err != nil {
+		s.logger.Error("failed to get expense for payment retry", "error", err, "expense_id", expenseID)
+		return ErrExpenseNotFound
+	}
+
+	// Check if expense is approved and payment failed
+	if expense.ExpenseStatus != ExpenseStatusApproved {
+		s.logger.Error("expense not approved for payment retry", "expense_id", expenseID, "status", expense.ExpenseStatus)
+		return ErrInvalidExpenseStatus
+	}
+
+	if expense.PaymentStatus == nil || *expense.PaymentStatus != PaymentStatusFailed {
+		s.logger.Error("payment retry not allowed for current payment status",
+			"expense_id", expenseID,
+			"payment_status", expense.PaymentStatus)
+		return ErrInvalidExpenseStatus
+	}
+
+	s.logger.Info("retrying payment", "expense_id", expenseID, "amount", expense.AmountIDR)
+
+	// Trigger payment processing asynchronously
+	go s.processPaymentAsync(expenseID, expense.AmountIDR)
+
+	return nil
 }
