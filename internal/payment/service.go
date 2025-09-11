@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -33,6 +34,21 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 	if err := req.Validate(); err != nil {
 		s.logger.Error("payment request validation failed", "error", err)
 		return nil, fmt.Errorf("validation error: %w", err)
+	}
+
+	// Testing: Simulate payment failure for specific amounts or external IDs
+	if s.shouldSimulateFailure(req) {
+		s.logger.Info("simulating payment failure for testing",
+			"external_id", req.ExternalID,
+			"amount", req.Amount)
+
+		return &PaymentResponse{
+			Data: PaymentData{
+				ID:         fmt.Sprintf("failed-%s", req.ExternalID),
+				ExternalID: req.ExternalID,
+				Status:     PaymentStatusFailed,
+			},
+		}, nil
 	}
 
 	// Prepare request body
@@ -96,7 +112,26 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 	return &paymentResp, nil
 }
 
-// RetryPayment retries a failed payment with the same external ID
+// simulate fail case
+func (s *PaymentService) shouldSimulateFailure(req *PaymentRequest) bool {
+	failureAmounts := []int64{
+		9999999,
+		8888888,
+	}
+
+	for _, failAmount := range failureAmounts {
+		if req.Amount == failAmount || req.Amount%failAmount == 0 {
+			return true
+		}
+	}
+
+	if strings.Contains(strings.ToLower(req.ExternalID), "fail") {
+		return true
+	}
+
+	return false
+}
+
 func (s *PaymentService) RetryPayment(req *PaymentRequest) (*PaymentResponse, error) {
 	s.logger.Info("retrying payment", "external_id", req.ExternalID, "amount", req.Amount)
 	return s.ProcessPayment(req)

@@ -49,6 +49,7 @@ type Dependencies struct {
 	AuthHandler    *auth.Handler
 	UserHandler    *user.Handler
 	ExpenseHandler *expense.Handler
+	PaymentHandler *payment.Handler
 }
 
 func startHTTPServer() {
@@ -143,8 +144,12 @@ func setupRoutes(deps *Dependencies) {
 	expenseHandler := expense.NewHandler(expenseService)
 	deps.ExpenseHandler = expenseHandler
 
+	// Payment handler
+	paymentHandler := payment.NewHandler(expenseService, deps.Logger)
+	deps.PaymentHandler = paymentHandler
+
 	sqlDBForRoutes, _ := deps.DB.DB()
-	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler, deps.ExpenseHandler)
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler, deps.ExpenseHandler, deps.PaymentHandler)
 }
 
 func initializeDependencies() (*Dependencies, error) {

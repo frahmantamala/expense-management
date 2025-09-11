@@ -131,9 +131,25 @@ components:
           type: string
     PaymentRetryRequest:
       type: object
+      required:
+        - external_id
+        - expense_id
       properties:
         external_id:
           type: string
+          description: The external payment ID to retry
+        expense_id:
+          type: string
+          description: The expense ID associated with the payment
+    PaymentRetryResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Response message
+        payment_id:
+          type: string
+          description: New payment ID if successful
     PagedExpenses:
       type: object
       properties:
@@ -486,27 +502,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /expenses/{id}/payment/retry:
+  /payment/retry:
     post:
-      summary: Retry payment
+      summary: Retry payment for an expense
       operationId: RetryPayment
       security:
         - BearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/PaymentRetryRequest'
       responses:
         '200':
-          description: payment retried
+          description: Payment retry successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRetryResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /health:
     get:

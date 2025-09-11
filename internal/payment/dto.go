@@ -43,7 +43,19 @@ func (p *PaymentRequest) Validate() error {
 
 // PaymentRetryRequest represents retry request
 type PaymentRetryRequest struct {
-	ExternalID string `json:"external_id,omitempty"`
+	ExternalID string `json:"external_id" validate:"required"`
+	ExpenseID  string `json:"expense_id" validate:"required"`
+}
+
+// Validate validates the PaymentRetryRequest
+func (r *PaymentRetryRequest) Validate() error {
+	if r.ExternalID == "" {
+		return errors.New("external_id is required")
+	}
+	if r.ExpenseID == "" {
+		return errors.New("expense_id is required")
+	}
+	return nil
 }
 
 // CreatePaymentRequest creates a payment request for an expense
@@ -51,5 +63,13 @@ func CreatePaymentRequest(expenseID int64, amount int64) *PaymentRequest {
 	return &PaymentRequest{
 		Amount:     amount,
 		ExternalID: fmt.Sprintf("expense-%d-%d", expenseID, amount), // Simple external ID format
+	}
+}
+
+// CreateFailureTestPaymentRequest creates a payment request that will simulate failure
+func CreateFailureTestPaymentRequest(expenseID int64, amount int64) *PaymentRequest {
+	return &PaymentRequest{
+		Amount:     amount,
+		ExternalID: fmt.Sprintf("expense-%d-%d-fail", expenseID, amount), // Contains "fail" to trigger simulation
 	}
 }

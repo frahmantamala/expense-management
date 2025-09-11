@@ -64,3 +64,11 @@ test.html
 
 .env
 .env.example
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib

@@ -58,6 +58,7 @@ var seedCmd = &cobra.Command{
 			{"reject_expenses", "Can reject expenses"},
 			{"create_expenses", "Can create expenses"},
 			{"edit_expenses", "Can edit expenses"},
+			{"retry_payments", "Can retry payments"},
 		}
 
 		for _, p := range permissions {

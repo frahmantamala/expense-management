@@ -6,13 +6,14 @@ import (
 
 	"github.com/frahmantamala/expense-management/internal/auth"
 	"github.com/frahmantamala/expense-management/internal/expense"
+	"github.com/frahmantamala/expense-management/internal/payment"
 	"github.com/frahmantamala/expense-management/internal/transport/middleware"
 	"github.com/frahmantamala/expense-management/internal/transport/swagger"
 	"github.com/frahmantamala/expense-management/internal/user"
 	"github.com/go-chi/chi"
 )
 
-func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler) {
+func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler, paymentHandler *payment.Handler) {
 	healthHandler := NewHealthHandler(db)
 	// Serve OpenAPI spec at root (outside API prefix)
 	router.Get("/openapi.yml", func(w http.ResponseWriter, r *http.Request) {
@@ -55,11 +56,18 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 						// Manager routes with permission protection
 						er.Group(func(mr chi.Router) {
 							mr.Use(middleware.RequirePermissions("approve_expenses", "reject_expenses", "manager", "admin"))
-							mr.Get("/pending", expenseHandler.GetPendingApprovals)      // GET /expenses/pending
-							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense)    // PATCH /expenses/:id/approve
-							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)      // PATCH /expenses/:id/reject
-							mr.Post("/{id}/payment/retry", expenseHandler.RetryPayment) // POST /expenses/:id/payment/retry
+							mr.Get("/pending", expenseHandler.GetPendingApprovals)   // GET /expenses/pending
+							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense) // PATCH /expenses/:id/approve
+							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)   // PATCH /expenses/:id/reject
 						})
+					})
+				}
+
+				// Payment routes (requires retry_payments permission)
+				if paymentHandler != nil {
+					pr.Group(func(pmr chi.Router) {
+						pmr.Use(middleware.RequirePermissions("retry_payments", "admin"))
+						pmr.Post("/payment/retry", paymentHandler.RetryPayment) // POST /payment/retry
 					})
 				}
 			})
