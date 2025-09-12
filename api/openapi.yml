@@ -70,6 +70,17 @@ components:
           format: date-time
           description: Date when the expense occurred
           example: "2025-09-11T00:00:00Z"
+        receipt_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL of the receipt file from external storage (from mock server response)
+          example: "https://650cfcbc47af3fd22f6818ca.mockapi.io/test/v1/files/receipt_123.pdf"
+        receipt_filename:
+          type: string
+          nullable: true
+          description: Original filename of the receipt (from mock server response)
+          example: "receipt_lunch_2025.pdf"
     Expense:
       type: object
       properties:
@@ -93,6 +104,17 @@ components:
           type: string
           description: Expense category
           example: "makan"
+        receipt_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL of the receipt file from external storage
+          example: "https://650cfcbc47af3fd22f6818ca.mockapi.io/test/v1/files/receipt_123.pdf"
+        receipt_filename:
+          type: string
+          nullable: true
+          description: Original filename of the receipt
+          example: "receipt_lunch_2025.pdf"
         expense_status: 
           type: string
           description: Current status of the expense
@@ -374,32 +396,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Expense'
-
-  /expenses/{id}/receipt:
-    post:
-      summary: Upload receipt
-      operationId: UploadReceipt
-      security:
-        - BearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                receipt:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: uploaded
 
   /expenses/{id}/approve:
     patch:

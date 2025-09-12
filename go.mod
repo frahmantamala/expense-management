@@ -3,7 +3,6 @@ module github.com/frahmantamala/expense-management
 go 1.23.6
 
 require (
-	github.com/deepmap/oapi-codegen v1.16.3
 	github.com/getkin/kin-openapi v0.132.0
 	github.com/go-chi/chi v1.5.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
@@ -59,6 +58,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/swaggo/files v0.0.0-20220610200504-28940afbdbfe // indirect
 	github.com/swaggo/swag v1.8.1 // indirect
+	github.com/ugorji/go/codec v1.2.11 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect

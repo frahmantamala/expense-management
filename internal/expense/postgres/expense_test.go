@@ -104,66 +104,86 @@ var _ = Describe("ExpenseRepository", func() {
 	})
 
 	Describe("Create", func() {
-		It("should create a new expense successfully", func() {
-			exp := &expense.Expense{
+		It("should create an expense successfully", func() {
+			expense := &expense.Expense{
 				UserID:        1,
 				AmountIDR:     100000,
 				Description:   "Test expense",
-				Category:      "Travel",
+				Category:      "makan",
 				ExpenseStatus: expense.ExpenseStatusPendingApproval,
-				ExpenseDate:   time.Now(),
+				ExpenseDate:   time.Now().AddDate(0, 0, -1),
 				SubmittedAt:   time.Now(),
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
 			}
 
-			err := repo.Create(exp)
+			err := repo.Create(expense)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp.ID).To(BeNumerically(">", 0))
+			Expect(expense.ID).To(BeNumerically(">", 0))
 		})
 
-		It("should set created_at and updated_at automatically", func() {
-			now := time.Now()
-			exp := &expense.Expense{
-				UserID:        1,
-				AmountIDR:     100000,
-				Description:   "Test expense",
-				Category:      "Travel",
-				ExpenseStatus: expense.ExpenseStatusPendingApproval,
-				ExpenseDate:   now,
-				SubmittedAt:   now,
-				CreatedAt:     now,
-				UpdatedAt:     now,
-			}
+		It("should create an expense with receipt data successfully", func() {
+			receiptURL := "https://650cfcbc47af3fd22f6818ca.mockapi.io/test/v1/files/receipt_123.pdf"
+			receiptFilename := "receipt_lunch_2025.pdf"
 
-			err := repo.Create(exp)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Retrieve the expense to check the timestamps are preserved
-			retrieved, err := repo.GetByID(exp.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.CreatedAt.Unix()).To(Equal(now.Unix()))
-			Expect(retrieved.UpdatedAt.Unix()).To(Equal(now.Unix()))
-		})
-
-		It("should handle optional fields correctly", func() {
-			receiptURL := "https://example.com/receipt.pdf"
-			receiptFileName := "receipt.pdf"
-
-			exp := &expense.Expense{
+			expense := &expense.Expense{
 				UserID:          1,
-				AmountIDR:       100000,
-				Description:     "Test expense with receipt",
-				Category:        "Travel",
+				AmountIDR:       50000,
+				Description:     "Lunch with receipt",
+				Category:        "makan",
 				ReceiptURL:      &receiptURL,
-				ReceiptFileName: &receiptFileName,
+				ReceiptFileName: &receiptFilename,
 				ExpenseStatus:   expense.ExpenseStatusPendingApproval,
-				ExpenseDate:     time.Now(),
+				ExpenseDate:     time.Now().AddDate(0, 0, -1),
 				SubmittedAt:     time.Now(),
+				CreatedAt:       time.Now(),
+				UpdatedAt:       time.Now(),
 			}
 
-			err := repo.Create(exp)
+			err := repo.Create(expense)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp.ReceiptURL).To(Equal(&receiptURL))
-			Expect(exp.ReceiptFileName).To(Equal(&receiptFileName))
+			Expect(expense.ID).To(BeNumerically(">", 0))
+
+			// Verify receipt data was saved
+			retrievedExpense, err := repo.GetByID(expense.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrievedExpense.ReceiptURL).NotTo(BeNil())
+			Expect(*retrievedExpense.ReceiptURL).To(Equal(receiptURL))
+			Expect(retrievedExpense.ReceiptFileName).NotTo(BeNil())
+			Expect(*retrievedExpense.ReceiptFileName).To(Equal(receiptFilename))
+		})
+
+		It("should create an expense without receipt data successfully", func() {
+			expense := &expense.Expense{
+				UserID:        1,
+				AmountIDR:     30000,
+				Description:   "Expense without receipt",
+				Category:      "kantor",
+				ExpenseStatus: expense.ExpenseStatusPendingApproval,
+				ExpenseDate:   time.Now().AddDate(0, 0, -1),
+				SubmittedAt:   time.Now(),
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+			}
+
+			err := repo.Create(expense)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(expense.ID).To(BeNumerically(">", 0))
+
+			// Verify receipt fields are nil
+			retrievedExpense, err := repo.GetByID(expense.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(retrievedExpense.ReceiptURL).To(BeNil())
+			Expect(retrievedExpense.ReceiptFileName).To(BeNil())
+		})
+
+		It("should return error for invalid expense", func() {
+			expense := &expense.Expense{
+				// Missing required fields
+			}
+
+			err := repo.Create(expense)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 
