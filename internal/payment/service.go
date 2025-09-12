@@ -9,31 +9,71 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
 )
 
-// PaymentService handles payment operations
+// PaymentRepository interface for payment database operations
+type PaymentRepository interface {
+	Create(p *payment.Payment) error
+	GetByExternalID(externalID string) (*payment.Payment, error)
+	GetLatestByExpenseID(expenseID int64) (*payment.Payment, error)
+	UpdateStatus(id int64, status string, paymentMethod *string, gatewayResponse json.RawMessage, failureReason *string) error
+	IncrementRetryCount(id int64) error
+}
+
+// PaymentService handles payment operations with external API and database
 type PaymentService struct {
-	client  *http.Client
-	baseURL string
-	logger  *slog.Logger
+	client     *http.Client
+	baseURL    string
+	logger     *slog.Logger
+	repository PaymentRepository
 }
 
 // NewPaymentService creates a new payment service
-func NewPaymentService(baseURL string, logger *slog.Logger) *PaymentService {
+func NewPaymentService(baseURL string, logger *slog.Logger, repository PaymentRepository) *PaymentService {
 	return &PaymentService{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		baseURL: baseURL,
-		logger:  logger,
+		baseURL:    baseURL,
+		logger:     logger,
+		repository: repository,
 	}
 }
 
-// ProcessPayment sends a payment request to the external API
+// CreatePayment creates a new payment record in database
+func (s *PaymentService) CreatePayment(expenseID int64, externalID string, amountIDR int64) (*payment.Payment, error) {
+	paymentEntity := &payment.Payment{
+		ExpenseID:  expenseID,
+		ExternalID: externalID,
+		AmountIDR:  amountIDR,
+		Status:     payment.StatusPending,
+		RetryCount: 0,
+	}
+
+	err := s.repository.Create(paymentEntity)
+	if err != nil {
+		s.logger.Error("failed to create payment record", "error", err, "expense_id", expenseID)
+		return nil, fmt.Errorf("failed to create payment record: %w", err)
+	}
+
+	s.logger.Info("payment record created", "payment_id", paymentEntity.ID, "expense_id", expenseID, "external_id", externalID)
+	return paymentEntity, nil
+}
+
+// ProcessPayment sends a payment request to the external API and updates database
 func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, error) {
 	if err := req.Validate(); err != nil {
 		s.logger.Error("payment request validation failed", "error", err)
 		return nil, fmt.Errorf("validation error: %w", err)
+	}
+
+	// Get payment record from database
+	paymentRecord, err := s.repository.GetByExternalID(req.ExternalID)
+	if err != nil {
+		s.logger.Error("payment record not found", "external_id", req.ExternalID, "error", err)
+		return nil, fmt.Errorf("payment record not found: %w", err)
 	}
 
 	// Testing: Simulate payment failure for specific amounts or external IDs
@@ -41,6 +81,13 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 		s.logger.Info("simulating payment failure for testing",
 			"external_id", req.ExternalID,
 			"amount", req.Amount)
+
+		// Update payment status to failed
+		failureReason := "Simulated failure for testing"
+		err = s.repository.UpdateStatus(paymentRecord.ID, payment.StatusFailed, nil, nil, &failureReason)
+		if err != nil {
+			s.logger.Error("failed to update payment status to failed", "error", err, "payment_id", paymentRecord.ID)
+		}
 
 		return &PaymentResponse{
 			Data: PaymentData{
@@ -77,6 +124,14 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
 		s.logger.Error("payment request failed", "error", err, "external_id", req.ExternalID)
+
+		// Update payment status to failed
+		failureReason := err.Error()
+		updateErr := s.repository.UpdateStatus(paymentRecord.ID, payment.StatusFailed, nil, nil, &failureReason)
+		if updateErr != nil {
+			s.logger.Error("failed to update payment status after HTTP error", "error", updateErr, "payment_id", paymentRecord.ID)
+		}
+
 		return nil, fmt.Errorf("HTTP request error: %w", err)
 	}
 	defer resp.Body.Close()
@@ -94,6 +149,14 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 			"status", resp.StatusCode,
 			"response", string(respBody),
 			"external_id", req.ExternalID)
+
+		// Update payment status to failed
+		failureReason := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		updateErr := s.repository.UpdateStatus(paymentRecord.ID, payment.StatusFailed, nil, respBody, &failureReason)
+		if updateErr != nil {
+			s.logger.Error("failed to update payment status after API error", "error", updateErr, "payment_id", paymentRecord.ID)
+		}
+
 		return nil, fmt.Errorf("payment API error: status %d, response: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -102,6 +165,22 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 	if err := json.Unmarshal(respBody, &paymentResp); err != nil {
 		s.logger.Error("failed to unmarshal payment response", "error", err, "response", string(respBody))
 		return nil, fmt.Errorf("response unmarshal error: %w", err)
+	}
+
+	// Update payment status based on response
+	var status string
+	switch paymentResp.Data.Status {
+	case PaymentStatusSuccess:
+		status = payment.StatusSuccess
+	case PaymentStatusFailed:
+		status = payment.StatusFailed
+	default:
+		status = payment.StatusPending
+	}
+
+	err = s.repository.UpdateStatus(paymentRecord.ID, status, nil, respBody, nil)
+	if err != nil {
+		s.logger.Error("failed to update payment status", "error", err, "payment_id", paymentRecord.ID)
 	}
 
 	s.logger.Info("payment processed successfully",
@@ -132,7 +211,28 @@ func (s *PaymentService) shouldSimulateFailure(req *PaymentRequest) bool {
 	return false
 }
 
+// RetryPayment retries a failed payment
 func (s *PaymentService) RetryPayment(req *PaymentRequest) (*PaymentResponse, error) {
 	s.logger.Info("retrying payment", "external_id", req.ExternalID, "amount", req.Amount)
+
+	// Get payment record and increment retry count
+	payment, err := s.repository.GetByExternalID(req.ExternalID)
+	if err != nil {
+		s.logger.Error("payment record not found for retry", "external_id", req.ExternalID, "error", err)
+		return nil, fmt.Errorf("payment record not found: %w", err)
+	}
+
+	// Increment retry count
+	err = s.repository.IncrementRetryCount(payment.ID)
+	if err != nil {
+		s.logger.Error("failed to increment retry count", "error", err, "payment_id", payment.ID)
+	}
+
+	// Process payment (this will handle status updates)
 	return s.ProcessPayment(req)
+}
+
+// GetPaymentByExpenseID gets the latest payment for an expense
+func (s *PaymentService) GetPaymentByExpenseID(expenseID int64) (*payment.Payment, error) {
+	return s.repository.GetLatestByExpenseID(expenseID)
 }

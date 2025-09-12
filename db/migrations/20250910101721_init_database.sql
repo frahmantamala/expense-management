@@ -51,7 +51,6 @@ CREATE TABLE expenses (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- optional FK from expenses.category -> expense_categories.name
 ALTER TABLE expenses
   ADD CONSTRAINT fk_expense_category
   FOREIGN KEY (category)
@@ -60,16 +59,14 @@ ALTER TABLE expenses
 CREATE TABLE payments (
   id BIGSERIAL PRIMARY KEY,
   expense_id BIGINT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
-  amount_idr BIGINT NOT NULL,
   external_id VARCHAR(255) NOT NULL UNIQUE,
-  payment_api_id VARCHAR(255),
-  payment_status VARCHAR(50) NOT NULL DEFAULT 'processing',
-  payment_provider_response JSONB,
-  error_message TEXT,
+  amount_idr BIGINT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'pending',
+  payment_method VARCHAR(100),
+  gateway_response JSONB,
+  failure_reason TEXT,
   retry_count INTEGER DEFAULT 0,
-  initiated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-  completed_at TIMESTAMP WITH TIME ZONE,
-  failed_at TIMESTAMP WITH TIME ZONE,
+  processed_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
@@ -77,7 +74,10 @@ CREATE TABLE payments (
 CREATE INDEX idx_user_status ON expenses (user_id, expense_status);
 CREATE INDEX idx_status_amount ON expenses (expense_status, amount_idr);
 CREATE INDEX idx_submitted_date ON expenses (submitted_at);
-CREATE INDEX idx_expense_payment_status ON payments (expense_id, payment_status);
+CREATE INDEX idx_payments_expense_id ON payments(expense_id);
+CREATE INDEX idx_payments_external_id ON payments(external_id);
+CREATE INDEX idx_payments_status ON payments(status);
+CREATE INDEX idx_payments_created_at ON payments(created_at);
 -- +goose StatementEnd
 
 -- +goose Down

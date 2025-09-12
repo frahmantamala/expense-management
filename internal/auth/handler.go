@@ -27,7 +27,6 @@ func NewHandler(svc AuthService) *Handler {
 	}
 }
 
-// Login handles POST /auth/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var dto LoginDTO
 	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
@@ -57,7 +56,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	h.WriteJSON(w, http.StatusOK, tokens)
 }
 
-// RefreshToken handles POST /auth/refresh
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var dto RefreshTokenDTO
 	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
@@ -88,9 +86,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	h.WriteJSON(w, http.StatusOK, tokens)
 }
 
-// Logout handles POST /auth/logout
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	// Extract token from Authorization header
 	token := h.ExtractTokenFromHeader(r)
 	if token == "" {
 		h.WriteError(w, http.StatusUnauthorized, "missing authorization token")
@@ -104,16 +100,9 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// In a production system, you might want to:
-	// 1. Add the token to a blacklist/revocation list
-	// 2. Store revoked tokens in Redis or database
-	// 3. Set shorter TTL on tokens
-
-	// For now, just return success since JWT is stateless
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// AuthMiddleware validates JWT tokens and adds user to context
 func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := h.ExtractTokenFromHeader(r)
@@ -138,7 +127,6 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 
 		h.Logger.Info("auth middleware: token validated successfully", "user_id", claims.UserID, "email", claims.Email)
 
-		// Create a core user object for context (compatible with UserFromContext)
 		var uid int64
 		if claims.UserID != "" {
 			if parsed, perr := strconv.ParseInt(claims.UserID, 10, 64); perr == nil {
@@ -148,7 +136,6 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Load user with permissions from database
 		coreUser, err := h.Service.GetUserWithPermissions(uid)
 		if err != nil {
 			h.Logger.Error("auth middleware: failed to load user permissions", "user_id", uid, "error", err)
@@ -158,7 +145,6 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 
 		h.Logger.Info("auth middleware: adding user to context", "user_id", uid, "email", claims.Email)
 
-		// Add user to request context
 		ctx := context.WithValue(r.Context(), ContextUserKey, coreUser)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

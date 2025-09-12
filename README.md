@@ -10,6 +10,9 @@ Expense management where are handle some functionality like create expense, appr
 - Make
 
 ### Setup
+- copy config.example.yml to config.yml
+- update with actual config
+
 ```bash
 # Clone and install dependencies
 git clone https://github.com/frahmantamala/expense-management.git
@@ -34,7 +37,7 @@ The API will be available at `http://localhost:8080` with Swagger docs at `/swag
 - **Categories**:(perjalanan, makan, kantor, pemasaran, etc)
 
 ### Payment Processing
-- Automatic payment initiation after approval
+- Automate payment initiation after approval
 - External payment gateway integration with retry capability
 - Payment status tracking (pending → success/failed)
 - Failed payments can be retried by authorized users
@@ -81,7 +84,8 @@ This app following approach domain driven which each module isolate in his own d
 ```sql
 -- Core tables
 users (id, email, password_hash, role, permissions)
-expenses (id, user_id, amount_idr, description, category, expense_status, payment_status, ...)
+expenses (id, user_id, amount_idr, description, category, expense_status)
+payments
 
 -- Audit fields on all tables
 created_at, updated_at, processed_at, paid_at

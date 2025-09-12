@@ -1,0 +1,41 @@
+http_server:
+  port: 8080
+  base_url: "http://localhost:8080"
+  allowed_origins: "http://localhost:3000"
+  read_header_timeout: 5s
+  read_timeout: 15s
+  idle_timeout: 60s
+  write_timeout: 15s
+
+database:
+  max_open_conns: 20
+  max_idle_conns: 10
+  conn_max_lifetime: 60m
+  conn_max_idle_time: 10m
+  # Update the source with your actual database credentials
+  source: "postgresql://root:secret@localhost:5432/expense_management_db?sslmode=disable"
+
+security:
+  access_token_duration: 15m
+  refresh_token_duration: 24h
+  bcrypt_cost: 12
+  # Base64 encoded session secret
+  session_secret: "jwt-secret-key"
+
+payment:
+  mock_api_url: "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io"
+
+observability:
+  metrics:
+    enabled: true
+    path: "/metrics"
+
+  tracing:
+    enabled: false
+    service_name: "expense_management"
+    sampling_rate: 1.0
+    jaeger_url: ""
+
+  logging:
+    level: "debug"
+    format: "text"

@@ -1,14 +1,16 @@
 package expense
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 )
 
 // PaymentProcessor interface defines payment processing methods
 type PaymentProcessor interface {
-	ProcessPayment(expenseID int64, amount int64) (paymentID, externalID string, err error)
-	RetryPayment(externalID string, amount int64) (paymentID string, err error)
+	ProcessPayment(expenseID int64, amount int64) (externalID string, err error)
+	RetryPayment(expenseID int64, externalID string) error
+	GetPaymentStatus(expenseID int64) (interface{}, error) // Returns payment view
 }
 
 // Repository interface defines the data access methods for expenses
@@ -19,7 +21,6 @@ type Repository interface {
 	GetPendingApprovals(limit, offset int) ([]*Expense, error)
 	Update(expense *Expense) error
 	UpdateStatus(id int64, status string, processedAt time.Time) error
-	UpdatePaymentInfo(id int64, paymentStatus, paymentID, paymentExternalID string, paidAt *time.Time) error
 }
 
 // Service handles expense business logic
@@ -240,34 +241,15 @@ func (s *Service) hasManagerPermissions(userPermissions []string) bool {
 func (s *Service) processPaymentAsync(expenseID int64, amount int64) {
 	s.logger.Info("starting payment processing", "expense_id", expenseID, "amount", amount)
 
-	// Set initial payment status to pending
-	if err := s.repo.UpdatePaymentInfo(expenseID, PaymentStatusPending, "", "", nil); err != nil {
-		s.logger.Error("failed to set payment status to pending", "error", err, "expense_id", expenseID)
-		return
-	}
-
-	// Process payment through payment service
-	paymentID, externalID, err := s.paymentProcessor.ProcessPayment(expenseID, amount)
+	// Process payment through payment service (this creates payment record and processes it)
+	externalID, err := s.paymentProcessor.ProcessPayment(expenseID, amount)
 	if err != nil {
-		s.logger.Error("payment processing failed", "error", err, "expense_id", expenseID)
-
-		// Update payment status to failed
-		if updateErr := s.repo.UpdatePaymentInfo(expenseID, PaymentStatusFailed, "", externalID, nil); updateErr != nil {
-			s.logger.Error("failed to update payment status to failed", "error", updateErr, "expense_id", expenseID)
-		}
+		s.logger.Error("payment processing failed", "error", err, "expense_id", expenseID, "external_id", externalID)
 		return
 	}
 
-	// Payment succeeded, update status
-	paidAt := time.Now()
-	if err := s.repo.UpdatePaymentInfo(expenseID, PaymentStatusSuccess, paymentID, externalID, &paidAt); err != nil {
-		s.logger.Error("failed to update payment status to success", "error", err, "expense_id", expenseID)
-		return
-	}
-
-	s.logger.Info("payment processed successfully",
+	s.logger.Info("payment processing initiated successfully",
 		"expense_id", expenseID,
-		"payment_id", paymentID,
 		"external_id", externalID)
 }
 
@@ -286,23 +268,29 @@ func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error 
 		return ErrExpenseNotFound
 	}
 
-	// Check if expense is approved and payment failed
+	// Check if expense is approved
 	if expense.ExpenseStatus != ExpenseStatusApproved {
 		s.logger.Error("expense not approved for payment retry", "expense_id", expenseID, "status", expense.ExpenseStatus)
 		return ErrInvalidExpenseStatus
 	}
 
-	if expense.PaymentStatus == nil || *expense.PaymentStatus != PaymentStatusFailed {
-		s.logger.Error("payment retry not allowed for current payment status",
-			"expense_id", expenseID,
-			"payment_status", expense.PaymentStatus)
+	// Get payment status from payment service to validate it exists
+	_, err = s.paymentProcessor.GetPaymentStatus(expenseID)
+	if err != nil {
+		s.logger.Error("failed to get payment status", "error", err, "expense_id", expenseID)
 		return ErrInvalidExpenseStatus
 	}
 
 	s.logger.Info("retrying payment", "expense_id", expenseID, "amount", expense.AmountIDR)
 
-	// Trigger payment processing asynchronously
-	go s.processPaymentAsync(expenseID, expense.AmountIDR)
+	// Use payment processor to retry with proper external ID
+	// We'll need the external ID from the payment record, but for now use a derived one
+	externalID := fmt.Sprintf("expense-%d-%d", expenseID, expense.AmountIDR)
+	err = s.paymentProcessor.RetryPayment(expenseID, externalID)
+	if err != nil {
+		s.logger.Error("payment retry failed", "error", err, "expense_id", expenseID)
+		return fmt.Errorf("payment retry failed: %w", err)
+	}
 
 	return nil
 }

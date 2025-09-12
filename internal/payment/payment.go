@@ -1,88 +1,61 @@
 package payment
 
 import (
-	"fmt"
-	"log/slog"
+	"time"
+
+	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
 )
 
-type ExpensePaymentProcessor struct {
-	paymentService *PaymentService
-	logger         *slog.Logger
+// PaymentView represents API-ready view model for payment
+type PaymentView struct {
+	ID            int64      `json:"id"`
+	ExpenseID     int64      `json:"expense_id"`
+	ExternalID    string     `json:"external_id"`
+	AmountIDR     int64      `json:"amount_idr"`
+	Status        string     `json:"status"`
+	PaymentMethod *string    `json:"payment_method,omitempty"`
+	FailureReason *string    `json:"failure_reason,omitempty"`
+	RetryCount    int        `json:"retry_count"`
+	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
-func NewExpensePaymentProcessor(paymentService *PaymentService, logger *slog.Logger) *ExpensePaymentProcessor {
-	return &ExpensePaymentProcessor{
-		paymentService: paymentService,
-		logger:         logger,
+// PaymentSummaryView represents simplified view for listing
+type PaymentSummaryView struct {
+	ID         int64     `json:"id"`
+	ExternalID string    `json:"external_id"`
+	AmountIDR  int64     `json:"amount_idr"`
+	Status     string    `json:"status"`
+	RetryCount int       `json:"retry_count"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// ToView converts payment domain model to API view model
+func ToView(p *payment.Payment) *PaymentView {
+	return &PaymentView{
+		ID:            p.ID,
+		ExpenseID:     p.ExpenseID,
+		ExternalID:    p.ExternalID,
+		AmountIDR:     p.AmountIDR,
+		Status:        p.Status,
+		PaymentMethod: p.PaymentMethod,
+		FailureReason: p.FailureReason,
+		RetryCount:    p.RetryCount,
+		ProcessedAt:   p.ProcessedAt,
+		CreatedAt:     p.CreatedAt,
+		UpdatedAt:     p.UpdatedAt,
 	}
 }
 
-func (p *ExpensePaymentProcessor) ProcessPayment(expenseID int64, amount int64) (paymentID, externalID string, err error) {
-	paymentReq := CreatePaymentRequest(expenseID, amount)
-
-	p.logger.Info("processing payment for expense",
-		"expense_id", expenseID,
-		"amount", amount,
-		"external_id", paymentReq.ExternalID)
-
-	// Call payment service
-	response, err := p.paymentService.ProcessPayment(paymentReq)
-	if err != nil {
-		p.logger.Error("payment processing failed",
-			"error", err,
-			"expense_id", expenseID,
-			"external_id", paymentReq.ExternalID)
-		return "", paymentReq.ExternalID, fmt.Errorf("payment failed: %w", err)
+// ToSummaryView converts to summary view
+func ToSummaryView(p *payment.Payment) *PaymentSummaryView {
+	return &PaymentSummaryView{
+		ID:         p.ID,
+		ExternalID: p.ExternalID,
+		AmountIDR:  p.AmountIDR,
+		Status:     p.Status,
+		RetryCount: p.RetryCount,
+		CreatedAt:  p.CreatedAt,
 	}
-
-	// Check payment status
-	if response.Data.Status != PaymentStatusSuccess {
-		p.logger.Error("payment not successful",
-			"status", response.Data.Status,
-			"expense_id", expenseID,
-			"payment_id", response.Data.ID)
-		return response.Data.ID, response.Data.ExternalID, fmt.Errorf("payment failed with status: %s", response.Data.Status)
-	}
-
-	p.logger.Info("payment processed successfully",
-		"expense_id", expenseID,
-		"payment_id", response.Data.ID,
-		"external_id", response.Data.ExternalID,
-		"status", response.Data.Status)
-
-	return response.Data.ID, response.Data.ExternalID, nil
-}
-
-func (p *ExpensePaymentProcessor) RetryPayment(externalID string, amount int64) (paymentID string, err error) {
-	p.logger.Info("retrying payment", "external_id", externalID, "amount", amount)
-
-	paymentReq := &PaymentRequest{
-		Amount:     amount,
-		ExternalID: externalID,
-	}
-
-	// Call payment service
-	response, err := p.paymentService.RetryPayment(paymentReq)
-	if err != nil {
-		p.logger.Error("payment retry failed",
-			"error", err,
-			"external_id", externalID)
-		return "", fmt.Errorf("payment retry failed: %w", err)
-	}
-
-	// Check payment status
-	if response.Data.Status != PaymentStatusSuccess {
-		p.logger.Error("payment retry not successful",
-			"status", response.Data.Status,
-			"payment_id", response.Data.ID,
-			"external_id", externalID)
-		return response.Data.ID, fmt.Errorf("payment retry failed with status: %s", response.Data.Status)
-	}
-
-	p.logger.Info("payment retry successful",
-		"payment_id", response.Data.ID,
-		"external_id", response.Data.ExternalID,
-		"status", response.Data.Status)
-
-	return response.Data.ID, nil
 }
