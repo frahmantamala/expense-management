@@ -2,22 +2,49 @@
 
 Expense management where are handle some functionality like create expense, approve and reject expense. This Expense also integrate with payment mocking api. 
 
-## Quick Start
+## 🐳 Quick Start with Docker (Recommended for Reviewers)
+
+For the fastest setup experience, use Docker Compose:
+
+```bash
+# Clone the repository
+git clone https://github.com/frahmantamala/expense-management.git
+cd expense-management
+
+# Start with Docker (includes database, migrations, and seeding)
+docker compose up -d
+
+# Access the application
+# API: http://localhost:8080
+# Swagger: http://localhost:8080/swagger/index.html
+or
+# API: http://localhost:8081
+# Swagger: http://localhost:8081/swagger/index.html
+```
+
+**Pre-seeded users:**
+- Admin: `padil@mail.com` / `password` (can approve/reject)
+- User: `fadhil@mail.com` / `password` (can only create)
+
+📚 **For detailed Docker usage, see [DOCKER.md](DOCKER.md)**
+
+## 🛠️ Development Setup
 
 ### Prerequisites
 - Go 1.23+
 - PostgreSQL 14+
 - Make
 
-### Setup
-- copy config.example.yml to config.yml
-- update with actual config
-
+### Manual Setup
 ```bash
 # Clone and install dependencies
 git clone https://github.com/frahmantamala/expense-management.git
 cd expense-management
 make deps
+
+# Copy and update configuration
+cp config.example.yml config.yml
+# Edit config.yml with your database settings
 
 # Database setup
 make migrate
@@ -26,13 +53,30 @@ make seed
 # Start the server
 make run
 ```
+### Or Use Docker
+```bash
+git clone https://github.com/frahmantamala/expense-management.git
+cd expense-management
+
+make docker-up
+```
+
+The user you can refer from seeder data. 
+1. User (fadhil@mail.com) (password)
+2. Approver (padil@mail.com) (password)
 
 The API will be available at `http://localhost:8080` with Swagger docs at `/swagger/index.html`.
 
-# To running test
+## 🧪 Testing
 ```bash
-# Run unit test
+# Run all tests
 make test
+
+# Run specific test suites
+make test-auth          # Authentication tests
+make test-expense       # Expense module tests
+make test-payment       # Payment module tests
+make test-postgres      # Repository tests
 ```
 
 ## Business Logic

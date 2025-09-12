@@ -87,6 +87,77 @@ func getEnvAsInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
+func getEnvAsDuration(key string, defaultVal time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
+		}
+	}
+	return defaultVal
+}
+
+// LoadConfigFromEnv loads configuration from environment variables
+// This is used for Docker deployment where env vars override config file
+func LoadConfigFromEnv() *Config {
+	return &Config{
+		Server: ServerConfig{
+			Port:              getEnvAsInt("APP_PORT", 8080),
+			BaseURL:           getEnv("APP_BASE_URL", "http://localhost:8080"),
+			AllowedOrigins:    getEnv("CORS_ALLOWED_ORIGINS", "*"),
+			ReadHeaderTimeout: getEnvAsDuration("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
+			ReadTimeout:       getEnvAsDuration("SERVER_READ_TIMEOUT", 10*time.Second),
+			IdleTimeout:       getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
+			WriteTimeout:      getEnvAsDuration("SERVER_WRITE_TIMEOUT", 10*time.Second),
+		},
+		Database: DatabaseConfig{
+			MaxOpenConns:    getEnvAsInt("DB_MAX_OPEN_CONNS", 10),
+			MaxIdleConns:    getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
+			ConnMaxLifetime: getEnvAsDuration("DB_CONN_MAX_LIFETIME", 60*time.Minute),
+			ConnMaxIdleTime: getEnvAsDuration("DB_CONN_MAX_IDLE_TIME", 30*time.Minute),
+			Source:          buildDSNFromEnv(),
+		},
+		Security: SecurityConfig{
+			AccessTokenDuration:  getEnvAsDuration("JWT_EXPIRY", 24*time.Hour),
+			RefreshTokenDuration: getEnvAsDuration("JWT_REFRESH_EXPIRY", 7*24*time.Hour),
+			BCryptCost:           getEnvAsInt("BCRYPT_COST", 12),
+			SessionSecret:        getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production"),
+		},
+		Payment: PaymentConfig{
+			MockAPIURL: getEnv("PAYMENT_MOCK_API_URL", "https://650cfcbc47af3fd22f6818ca.mockapi.io/test/v1"),
+			APIKey:     getEnv("PAYMENT_API_KEY", ""),
+		},
+		Observability: ObservabilityConfig{
+			Logging: LoggingConfig{
+				Level:  getEnv("LOG_LEVEL", "info"),
+				Format: getEnv("LOG_FORMAT", "json"),
+			},
+			Metrics: MetricsConfig{
+				Enabled: getEnv("METRICS_ENABLED", "false") == "true",
+				Path:    getEnv("METRICS_PATH", "/metrics"),
+			},
+			Tracing: TracingConfig{
+				Enabled:      getEnv("TRACING_ENABLED", "false") == "true",
+				ServiceName:  getEnv("TRACING_SERVICE_NAME", "expense-management"),
+				SamplingRate: 0.1,
+				JaegerURL:    getEnv("JAEGER_URL", ""),
+			},
+		},
+	}
+}
+
+// buildDSNFromEnv builds PostgreSQL connection string from environment variables
+func buildDSNFromEnv() string {
+	host := getEnv("DB_HOST", "localhost")
+	port := getEnv("DB_PORT", "5432")
+	user := getEnv("DB_USER", "postgres")
+	password := getEnv("DB_PASSWORD", "postgres")
+	dbname := getEnv("DB_NAME", "expense_management")
+	sslmode := getEnv("DB_SSLMODE", "disable")
+
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, user, password, dbname, sslmode)
+}
+
 func (c *Config) Validate() error {
 	var errs []string
 

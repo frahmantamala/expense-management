@@ -1,0 +1,68 @@
+# Binaries
+bin/
+main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# Docker files (we don't need them inside the container)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Node modules (if any)
+node_modules/
+
+# Test cache
+.cache/
+
+# Temporary files
+tmp/
+temp/
+
+# Coverage reports
+coverage/
+
+# Vendor (if using go mod, vendor is not needed)
+vendor/

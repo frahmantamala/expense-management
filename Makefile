@@ -7,9 +7,10 @@ DB_SOURCE ?= postgresql://root:secret@localhost:5432/expense_management_db?sslmo
 STEP ?= 0
 
 .PHONY: build run migrate migrate.rollback migration migration.go generate.openapi \
-        swagger seed seed-fresh deps dev-setup dev-setup-with-data docker-build docker-run \
+        swagger seed seed-fresh deps dev-setup dev-setup-with-data \
         lint clean test test-coverage test-cover test-auth test-payment test-expense \
-        test-postgres test-race test-short test-flaky test-summary
+        test-postgres test-race test-short test-flaky test-summary \
+        docker-up docker-down docker-logs docker-clean
 
 # Build the application (expects main.go)
 build:
@@ -158,11 +159,13 @@ dev-setup-with-data: deps migrate seed
 	@echo "Dev env with seeded data ready."
 
 # Docker targets
-docker-build:
-	docker build -t expense-management:latest .
+docker-up:
+	@echo "Starting Expense Management..."
+	docker compose up -d
 
-docker-run:
-	docker-compose up -d
+docker-down:
+	@echo "Stopping..."
+	docker compose down
 
 # Linting (golangci-lint expected)
 lint:
