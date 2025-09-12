@@ -52,7 +52,9 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		h.Logger.Error("CreateExpense: service error", "error", err, "user_id", user.ID)
 
 		// Check if it's a validation error
-		if err.Error() == "amount must be greater than 0" ||
+		if err.Error() == "amount must be positive" ||
+			err.Error() == "amount must be at least 10,000 IDR" ||
+			err.Error() == "amount must not exceed 50,000,000 IDR" ||
 			err.Error() == "description is required" ||
 			err.Error() == "category is required" ||
 			err.Error() == "expense date is required" ||

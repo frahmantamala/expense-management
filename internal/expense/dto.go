@@ -36,7 +36,13 @@ type CreateExpenseDTO struct {
 
 func (dto CreateExpenseDTO) Validate() error {
 	if dto.AmountIDR <= 0 {
-		return errors.New("amount must be greater than 0")
+		return errors.New("amount must be positive")
+	}
+	if dto.AmountIDR < 10000 {
+		return errors.New("amount must be at least 10,000 IDR")
+	}
+	if dto.AmountIDR > 50000000 {
+		return errors.New("amount must not exceed 50,000,000 IDR")
 	}
 	if dto.Description == "" {
 		return errors.New("description is required")

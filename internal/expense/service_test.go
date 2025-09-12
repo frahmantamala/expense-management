@@ -278,7 +278,45 @@ var _ = Describe("ExpenseService", func() {
 
 				// Then
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("amount"))
+				Expect(err.Error()).To(ContainSubstring("amount must be positive"))
+				Expect(result).To(BeNil())
+			})
+
+			It("should return validation error for amount below minimum", func() {
+				// Given
+				userID := int64(123)
+				dto := expense.CreateExpenseDTO{
+					AmountIDR:   5000, // Below minimum 10,000 IDR
+					Description: "Test expense",
+					Category:    "food",
+					ExpenseDate: time.Now(),
+				}
+
+				// When
+				result, err := expenseService.CreateExpense(userID, dto)
+
+				// Then
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("amount must be at least 10,000 IDR"))
+				Expect(result).To(BeNil())
+			})
+
+			It("should return validation error for amount above maximum", func() {
+				// Given
+				userID := int64(123)
+				dto := expense.CreateExpenseDTO{
+					AmountIDR:   60000000, // Above maximum 50,000,000 IDR
+					Description: "Test expense",
+					Category:    "food",
+					ExpenseDate: time.Now(),
+				}
+
+				// When
+				result, err := expenseService.CreateExpense(userID, dto)
+
+				// Then
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("amount must not exceed 50,000,000 IDR"))
 				Expect(result).To(BeNil())
 			})
 		})
