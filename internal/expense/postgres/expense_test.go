@@ -357,51 +357,94 @@ var _ = Describe("ExpenseRepository", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 		})
+	})
 
-		It("should retrieve only pending approval expenses", func() {
-			expenses, err := repo.GetPendingApprovals(10, 0)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(expenses).To(HaveLen(2))
+	Describe("GetAllExpenses", func() {
+		BeforeEach(func() {
+			// Create expenses with different statuses and submission times
+			expenses := []*expense.Expense{
+				{
+					UserID:        1,
+					AmountIDR:     100000,
+					Description:   "Expense 1 (oldest)",
+					Category:      "Travel",
+					ExpenseStatus: expense.ExpenseStatusPendingApproval,
+					ExpenseDate:   time.Now().Add(-3 * time.Hour),
+					SubmittedAt:   time.Now().Add(-3 * time.Hour),
+				},
+				{
+					UserID:        2,
+					AmountIDR:     200000,
+					Description:   "Expense 2 (approved)",
+					Category:      "Food",
+					ExpenseStatus: expense.ExpenseStatusApproved,
+					ExpenseDate:   time.Now().Add(-2 * time.Hour),
+					SubmittedAt:   time.Now().Add(-2 * time.Hour),
+				},
+				{
+					UserID:        3,
+					AmountIDR:     300000,
+					Description:   "Expense 3 (newest)",
+					Category:      "Office",
+					ExpenseStatus: expense.ExpenseStatusRejected,
+					ExpenseDate:   time.Now().Add(-1 * time.Hour),
+					SubmittedAt:   time.Now().Add(-1 * time.Hour),
+				},
+			}
 
-			// Should only include pending approval expenses
 			for _, exp := range expenses {
-				Expect(exp.ExpenseStatus).To(Equal(expense.ExpenseStatusPendingApproval))
+				err := repo.Create(exp)
+				Expect(err).NotTo(HaveOccurred())
 			}
 		})
 
-		It("should order by submitted_at ASC (FIFO)", func() {
-			expenses, err := repo.GetPendingApprovals(10, 0)
+		It("should retrieve all expenses regardless of status", func() {
+			expenses, err := repo.GetAllExpenses(10, 0)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(expenses).To(HaveLen(2))
+			Expect(expenses).To(HaveLen(3))
 
-			// Should be ordered by submitted_at ASC (oldest first for FIFO)
-			Expect(expenses[0].Description).To(Equal("Pending 1 (oldest)"))
-			Expect(expenses[1].Description).To(Equal("Pending 2 (newest)"))
+			// Should include all statuses
+			statuses := make(map[string]bool)
+			for _, exp := range expenses {
+				statuses[exp.ExpenseStatus] = true
+			}
+			Expect(statuses[expense.ExpenseStatusPendingApproval]).To(BeTrue())
+			Expect(statuses[expense.ExpenseStatusApproved]).To(BeTrue())
+			Expect(statuses[expense.ExpenseStatusRejected]).To(BeTrue())
+		})
+
+		It("should order by submitted_at DESC (newest first)", func() {
+			expenses, err := repo.GetAllExpenses(10, 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(expenses).To(HaveLen(3))
+
+			// Should be ordered by submitted_at DESC (newest first)
+			Expect(expenses[0].Description).To(Equal("Expense 3 (newest)"))
+			Expect(expenses[1].Description).To(Equal("Expense 2 (approved)"))
+			Expect(expenses[2].Description).To(Equal("Expense 1 (oldest)"))
 		})
 
 		It("should respect limit parameter", func() {
-			expenses, err := repo.GetPendingApprovals(1, 0)
+			expenses, err := repo.GetAllExpenses(2, 0)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(expenses).To(HaveLen(1))
-			Expect(expenses[0].Description).To(Equal("Pending 1 (oldest)"))
+			Expect(expenses).To(HaveLen(2))
+			Expect(expenses[0].Description).To(Equal("Expense 3 (newest)"))
+			Expect(expenses[1].Description).To(Equal("Expense 2 (approved)"))
 		})
 
 		It("should respect offset parameter", func() {
-			expenses, err := repo.GetPendingApprovals(10, 1)
+			expenses, err := repo.GetAllExpenses(10, 1)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(expenses).To(HaveLen(1))
-			Expect(expenses[0].Description).To(Equal("Pending 2 (newest)"))
+			Expect(expenses).To(HaveLen(2))
+			Expect(expenses[0].Description).To(Equal("Expense 2 (approved)"))
+			Expect(expenses[1].Description).To(Equal("Expense 1 (oldest)"))
 		})
 
-		It("should return empty slice when no pending approvals exist", func() {
-			// Update all pending expenses to approved
-			var pendingExpenses []ExpenseSQLite
-			db.Where("expense_status = ?", expense.ExpenseStatusPendingApproval).Find(&pendingExpenses)
-			for _, exp := range pendingExpenses {
-				db.Model(&exp).Update("expense_status", expense.ExpenseStatusApproved)
-			}
+		It("should return empty slice when no expenses exist", func() {
+			// Clear all expenses
+			db.Exec("DELETE FROM expenses")
 
-			expenses, err := repo.GetPendingApprovals(10, 0)
+			expenses, err := repo.GetAllExpenses(10, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(expenses).To(HaveLen(0))
 		})

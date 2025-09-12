@@ -96,7 +96,6 @@ const (
 	ExpenseStatusPendingApproval = "pending_approval"
 	ExpenseStatusApproved        = "approved"
 	ExpenseStatusRejected        = "rejected"
-	ExpenseStatusAutoApproved    = "auto_approved"
 )
 
 const AutoApprovalThreshold = 1000000

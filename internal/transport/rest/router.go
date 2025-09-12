@@ -16,6 +16,10 @@ import (
 
 func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler, categoryHandler *category.Handler, paymentHandler *payment.Handler) {
 	healthHandler := NewHealthHandler(db)
+
+	// Apply CORS middleware to all routes
+	router.Use(middleware.CORS)
+
 	// Serve OpenAPI spec at root (outside API prefix)
 	router.Get("/openapi.yml", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./api/openapi.yml")
@@ -57,14 +61,13 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 				if expenseHandler != nil {
 					pr.Route("/expenses", func(er chi.Router) {
 						// User expense routes
-						er.Post("/", expenseHandler.CreateExpense)  // POST /expenses
-						er.Get("/", expenseHandler.GetUserExpenses) // GET /expenses (user's own)
-						er.Get("/{id}", expenseHandler.GetExpense)  // GET /expenses/:id
+						er.Post("/", expenseHandler.CreateExpense) // POST /expenses
+						er.Get("/", expenseHandler.GetAllExpenses) // GET /expenses
+						er.Get("/{id}", expenseHandler.GetExpense) // GET /expenses/:id
 
 						// Manager routes with permission protection
 						er.Group(func(mr chi.Router) {
 							mr.Use(middleware.RequirePermissions("approve_expenses", "reject_expenses", "manager", "admin"))
-							mr.Get("/pending", expenseHandler.GetPendingApprovals)   // GET /expenses/pending
 							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense) // PATCH /expenses/:id/approve
 							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)   // PATCH /expenses/:id/reject
 						})

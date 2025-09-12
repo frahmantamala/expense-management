@@ -18,7 +18,7 @@ type Repository interface {
 	Create(expense *Expense) error
 	GetByID(id int64) (*Expense, error)
 	GetByUserID(userID int64, limit, offset int) ([]*Expense, error)
-	GetPendingApprovals(limit, offset int) ([]*Expense, error)
+	GetAllExpenses(limit, offset int) ([]*Expense, error)
 	Update(expense *Expense) error
 	UpdateStatus(id int64, status string, processedAt time.Time) error
 }
@@ -121,26 +121,22 @@ func (s *Service) GetUserExpenses(userID int64, limit, offset int) ([]*Expense, 
 	return expenses, nil
 }
 
-// GetPendingApprovals retrieves expenses pending approval with permission check
-func (s *Service) GetPendingApprovals(limit, offset int, userPermissions []string) ([]*Expense, error) {
-	// Check permissions at service level
+func (s *Service) GetAllExpenses(limit, offset int, userPermissions []string) ([]*Expense, error) {
 	if !s.hasManagerPermissions(userPermissions) {
-		s.logger.Warn("get pending approvals denied: insufficient permissions", "permissions", userPermissions)
+		s.logger.Warn("get all expenses denied: insufficient permissions", "permissions", userPermissions)
 		return nil, ErrUnauthorizedAccess
 	}
 
-	expenses, err := s.repo.GetPendingApprovals(limit, offset)
+	expenses, err := s.repo.GetAllExpenses(limit, offset)
 	if err != nil {
-		s.logger.Error("failed to get pending approvals", "error", err)
+		s.logger.Error("failed to get all expenses", "error", err)
 		return nil, err
 	}
 
 	return expenses, nil
 }
 
-// ApproveExpense approves an expense (manager only)
 func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []string) error {
-	// Check permissions at service level
 	if !s.hasManagerPermissions(userPermissions) {
 		s.logger.Warn("approve expense denied: insufficient permissions",
 			"expense_id", expenseID,
@@ -155,7 +151,6 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 		return ErrExpenseNotFound
 	}
 
-	// Check if expense can be approved
 	if expense.ExpenseStatus != ExpenseStatusPendingApproval {
 		s.logger.Warn("cannot approve expense in current status",
 			"expense_id", expenseID,
@@ -163,7 +158,6 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 		return ErrInvalidExpenseStatus
 	}
 
-	// Update status to approved
 	processedAt := time.Now()
 	if err := s.repo.UpdateStatus(expenseID, ExpenseStatusApproved, processedAt); err != nil {
 		s.logger.Error("failed to update expense status to approved", "error", err, "expense_id", expenseID)
@@ -175,7 +169,6 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 		"manager_id", managerID,
 		"amount", expense.AmountIDR)
 
-	// Trigger payment processing for approved expense
 	s.logger.Info("expense manually approved, triggering payment",
 		"expense_id", expenseID,
 		"amount", expense.AmountIDR)
@@ -183,9 +176,9 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 	go s.processPaymentAsync(expenseID, expense.AmountIDR)
 
 	return nil
-} // RejectExpense rejects an expense (manager only)
+}
+
 func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userPermissions []string) error {
-	// Check permissions at service level
 	if !s.hasManagerPermissions(userPermissions) {
 		s.logger.Warn("reject expense denied: insufficient permissions",
 			"expense_id", expenseID,
@@ -200,7 +193,6 @@ func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userP
 		return ErrExpenseNotFound
 	}
 
-	// Check if expense can be rejected
 	if expense.ExpenseStatus != ExpenseStatusPendingApproval {
 		s.logger.Warn("cannot reject expense in current status",
 			"expense_id", expenseID,
@@ -208,7 +200,6 @@ func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userP
 		return ErrInvalidExpenseStatus
 	}
 
-	// Update status to rejected
 	processedAt := time.Now()
 	if err := s.repo.UpdateStatus(expenseID, ExpenseStatusRejected, processedAt); err != nil {
 		s.logger.Error("failed to update expense status to rejected", "error", err, "expense_id", expenseID)
@@ -237,11 +228,9 @@ func (s *Service) hasManagerPermissions(userPermissions []string) bool {
 	return false
 }
 
-// processPaymentAsync processes payment for an approved expense asynchronously
 func (s *Service) processPaymentAsync(expenseID int64, amount int64) {
 	s.logger.Info("starting payment processing", "expense_id", expenseID, "amount", amount)
 
-	// Process payment through payment service (this creates payment record and processes it)
 	externalID, err := s.paymentProcessor.ProcessPayment(expenseID, amount)
 	if err != nil {
 		s.logger.Error("payment processing failed", "error", err, "expense_id", expenseID, "external_id", externalID)
@@ -253,7 +242,6 @@ func (s *Service) processPaymentAsync(expenseID int64, amount int64) {
 		"external_id", externalID)
 }
 
-// RetryPayment retries payment for a failed expense payment
 func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error {
 	// Check permissions (managers can retry payments)
 	if !s.hasManagerPermissions(userPermissions) {
@@ -261,14 +249,12 @@ func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error 
 		return ErrUnauthorizedAccess
 	}
 
-	// Get expense
 	expense, err := s.repo.GetByID(expenseID)
 	if err != nil {
 		s.logger.Error("failed to get expense for payment retry", "error", err, "expense_id", expenseID)
 		return ErrExpenseNotFound
 	}
 
-	// Check if expense is approved
 	if expense.ExpenseStatus != ExpenseStatusApproved {
 		s.logger.Error("expense not approved for payment retry", "expense_id", expenseID, "status", expense.ExpenseStatus)
 		return ErrInvalidExpenseStatus
@@ -283,8 +269,6 @@ func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error 
 
 	s.logger.Info("retrying payment", "expense_id", expenseID, "amount", expense.AmountIDR)
 
-	// Use payment processor to retry with proper external ID
-	// We'll need the external ID from the payment record, but for now use a derived one
 	externalID := fmt.Sprintf("expense-%d-%d", expenseID, expense.AmountIDR)
 	err = s.paymentProcessor.RetryPayment(expenseID, externalID)
 	if err != nil {

@@ -335,41 +335,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Expense'
     get:
-      summary: List expenses
-      operationId: ListExpenses
-      security:
-        - BearerAuth: []
-      parameters:
-        - in: query
-          name: page
-          schema:
-            type: integer
-            default: 1
-        - in: query
-          name: per_page
-          schema:
-            type: integer
-            default: 20
-        - in: query
-          name: status
-          schema:
-            type: string
-        - in: query
-          name: category
-          schema:
-            type: string
-      responses:
-        '200':
-          description: paged
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PagedExpenses'
-
-  /expenses/pending:
-    get:
-      summary: Get pending approval expenses (manager only)
-      operationId: GetPendingApprovals
+      summary: List current user's expenses
+      description: Retrieve expenses for the authenticated user
+      operationId: GetUserExpenses
       security:
         - BearerAuth: []
       parameters:
@@ -379,14 +347,16 @@ paths:
             type: integer
             default: 20
             maximum: 100
+          description: Maximum number of expenses to return
         - in: query
           name: offset
           schema:
             type: integer
             default: 0
+          description: Number of expenses to skip for pagination
       responses:
         '200':
-          description: pending expenses
+          description: User's expenses
           content:
             application/json:
               schema:
@@ -398,14 +368,10 @@ paths:
                       $ref: '#/components/schemas/Expense'
                   limit:
                     type: integer
+                    description: Number of expenses requested
                   offset:
                     type: integer
-        '403':
-          description: Forbidden - manager access required
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                    description: Number of expenses skipped
 
   /expenses/{id}:
     get:

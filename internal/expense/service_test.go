@@ -16,6 +16,7 @@ import (
 type mockExpenseRepository struct {
 	expenses          map[int64]*expense.Expense
 	expensesByUser    map[int64][]*expense.Expense
+	allExpenses       []*expense.Expense
 	pendingApprovals  []*expense.Expense
 	createError       error
 	getError          error
@@ -28,6 +29,7 @@ func newMockExpenseRepository() *mockExpenseRepository {
 	return &mockExpenseRepository{
 		expenses:         make(map[int64]*expense.Expense),
 		expensesByUser:   make(map[int64][]*expense.Expense),
+		allExpenses:      make([]*expense.Expense, 0),
 		pendingApprovals: make([]*expense.Expense, 0),
 		nextID:           1,
 	}
@@ -45,6 +47,9 @@ func (m *mockExpenseRepository) Create(exp *expense.Expense) error {
 
 	// Add to user expenses
 	m.expensesByUser[exp.UserID] = append(m.expensesByUser[exp.UserID], exp)
+
+	// Add to all expenses
+	m.allExpenses = append(m.allExpenses, exp)
 
 	// Add to pending approvals if applicable
 	if exp.ExpenseStatus == expense.ExpenseStatusPendingApproval {
@@ -103,6 +108,24 @@ func (m *mockExpenseRepository) GetPendingApprovals(limit, offset int) ([]*expen
 	}
 
 	return m.pendingApprovals[start:end], nil
+}
+
+func (m *mockExpenseRepository) GetAllExpenses(limit, offset int) ([]*expense.Expense, error) {
+	if m.getError != nil {
+		return nil, m.getError
+	}
+
+	// Simple pagination
+	start := offset
+	end := offset + limit
+	if start >= len(m.allExpenses) {
+		return []*expense.Expense{}, nil
+	}
+	if end > len(m.allExpenses) {
+		end = len(m.allExpenses)
+	}
+
+	return m.allExpenses[start:end], nil
 }
 
 func (m *mockExpenseRepository) Update(exp *expense.Expense) error {
@@ -502,26 +525,33 @@ var _ = Describe("ExpenseService", func() {
 		})
 	})
 
-	Describe("GetPendingApprovals", func() {
-		Context("when there are pending approvals", func() {
-			It("should return pending expenses", func() {
+	Describe("GetAllExpenses", func() {
+		Context("when there are expenses", func() {
+			It("should return all expenses", func() {
 				// Given
-				pendingExpense := &expense.Expense{
+				expense1 := &expense.Expense{
 					ID:            1,
 					UserID:        123,
 					AmountIDR:     75000,
 					ExpenseStatus: expense.ExpenseStatusPendingApproval,
 				}
-				mockRepo.pendingApprovals = []*expense.Expense{pendingExpense}
+				expense2 := &expense.Expense{
+					ID:            2,
+					UserID:        456,
+					AmountIDR:     100000,
+					ExpenseStatus: expense.ExpenseStatusApproved,
+				}
+				mockRepo.allExpenses = []*expense.Expense{expense1, expense2}
 				permissions := []string{"approve_expenses"} // Use correct permission string
 
 				// When
-				result, err := expenseService.GetPendingApprovals(10, 0, permissions)
+				result, err := expenseService.GetAllExpenses(10, 0, permissions)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result).To(HaveLen(1))
-				Expect(result[0].ExpenseStatus).To(Equal(expense.ExpenseStatusPendingApproval))
+				Expect(result).To(HaveLen(2))
+				Expect(result[0].ID).To(Equal(int64(1)))
+				Expect(result[1].ID).To(Equal(int64(2)))
 			})
 		})
 	})

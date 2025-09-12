@@ -13,13 +13,11 @@ import (
 	"github.com/go-chi/chi"
 )
 
-// Handler handles HTTP requests for expenses
 type Handler struct {
 	*transport.BaseHandler
 	Service *Service
 }
 
-// NewHandler creates a new expense handler
 func NewHandler(service *Service) *Handler {
 	lg := logger.LoggerWrapper()
 	if lg == nil {
@@ -31,7 +29,6 @@ func NewHandler(service *Service) *Handler {
 	}
 }
 
-// CreateExpense handles POST /expenses
 func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {
@@ -51,7 +48,6 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.Logger.Error("CreateExpense: service error", "error", err, "user_id", user.ID)
 
-		// Check if it's a validation error
 		if err.Error() == "amount must be positive" ||
 			err.Error() == "amount must be at least 10,000 IDR" ||
 			err.Error() == "amount must not exceed 50,000,000 IDR" ||
@@ -77,7 +73,6 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 	h.WriteJSON(w, http.StatusCreated, expense)
 }
 
-// GetExpense handles GET /expenses/:id
 func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {
@@ -94,7 +89,6 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user has manager permissions using the middleware helper
 	isManager := middleware.HasManagerPermissions(user)
 
 	expense, err := h.Service.GetExpenseByID(expenseID, user.ID, isManager)
@@ -115,7 +109,6 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 	h.WriteJSON(w, http.StatusOK, expense)
 }
 
-// GetUserExpenses handles GET /expenses (user's own expenses)
 func (h *Handler) GetUserExpenses(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {
@@ -124,9 +117,8 @@ func (h *Handler) GetUserExpenses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse pagination parameters
-	limit := 20 // default
-	offset := 0 // default
+	limit := 20
+	offset := 0
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
@@ -154,18 +146,17 @@ func (h *Handler) GetUserExpenses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetPendingApprovals handles GET /expenses/pending (manager only)
-func (h *Handler) GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
+// GetAllExpenses retrieves all expenses for managers/admins
+func (h *Handler) GetAllExpenses(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {
-		h.Logger.Error("GetPendingApprovals: user not found in context")
+		h.Logger.Error("GetAllExpenses: user not found in context")
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	// Parse pagination parameters
-	limit := 20 // default
-	offset := 0 // default
+	limit := 20
+	offset := 0
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
@@ -179,15 +170,15 @@ func (h *Handler) GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	expenses, err := h.Service.GetPendingApprovals(limit, offset, user.Permissions)
+	expenses, err := h.Service.GetAllExpenses(limit, offset, user.Permissions)
 	if err != nil {
-		h.Logger.Error("GetPendingApprovals: service error", "error", err, "user_id", user.ID)
+		h.Logger.Error("GetAllExpenses: service error", "error", err, "user_id", user.ID)
 
 		switch err {
 		case ErrUnauthorizedAccess:
 			h.WriteError(w, http.StatusForbidden, "manager access required")
 		default:
-			h.WriteError(w, http.StatusInternalServerError, "failed to get pending approvals")
+			h.WriteError(w, http.StatusInternalServerError, "failed to get all expenses")
 		}
 		return
 	}
@@ -199,7 +190,6 @@ func (h *Handler) GetPendingApprovals(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ApproveExpense handles PATCH /expenses/:id/approve (manager only)
 func (h *Handler) ApproveExpense(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {
@@ -236,7 +226,6 @@ func (h *Handler) ApproveExpense(w http.ResponseWriter, r *http.Request) {
 	h.WriteJSON(w, http.StatusOK, map[string]string{"status": "approved"})
 }
 
-// RejectExpense handles PATCH /expenses/:id/reject (manager only)
 func (h *Handler) RejectExpense(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {
@@ -260,7 +249,6 @@ func (h *Handler) RejectExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the DTO
 	if err := dto.Validate(); err != nil {
 		h.Logger.Error("RejectExpense: validation error", "error", err)
 		h.WriteError(w, http.StatusBadRequest, err.Error())
