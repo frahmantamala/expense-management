@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/frahmantamala/expense-management/internal/auth"
+	"github.com/frahmantamala/expense-management/internal/category"
 	"github.com/frahmantamala/expense-management/internal/expense"
 	"github.com/frahmantamala/expense-management/internal/payment"
 	"github.com/frahmantamala/expense-management/internal/transport/middleware"
@@ -13,7 +14,7 @@ import (
 	"github.com/go-chi/chi"
 )
 
-func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler, paymentHandler *payment.Handler) {
+func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler, categoryHandler *category.Handler, paymentHandler *payment.Handler) {
 	healthHandler := NewHealthHandler(db)
 	// Serve OpenAPI spec at root (outside API prefix)
 	router.Get("/openapi.yml", func(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +36,14 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 				sr.Post("/refresh", authHandler.RefreshToken)
 				sr.Post("/logout", authHandler.Logout)
 			})
+		}
 
+		// Public categories route (no auth required)
+		if categoryHandler != nil {
+			r.Get("/categories", categoryHandler.GetCategories)
+		}
+
+		if authHandler != nil {
 			// Protected routes that require authentication
 			r.Group(func(pr chi.Router) {
 				pr.Use(authHandler.AuthMiddleware)

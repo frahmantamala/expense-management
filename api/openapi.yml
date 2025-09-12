@@ -29,6 +29,19 @@ components:
           items:
             type: string
           example: ["can_approve", "can_reject", "can_read_expense"]
+
+    Category:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Category identifier
+          example: "makan"
+        description:
+          type: string
+          description: Category description
+          example: "Meals and entertainment"
+
     AuthRequest:
       type: object
       required: [email, password]
@@ -222,6 +235,23 @@ components:
             $ref: '#/components/schemas/ComponentStatus'
 
 paths:
+  /categories:
+    get:
+      summary: Get all expense categories
+      operationId: GetCategories
+      responses:
+        '200':
+          description: List of expense categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+
   /auth/login:
     post:
       summary: User login

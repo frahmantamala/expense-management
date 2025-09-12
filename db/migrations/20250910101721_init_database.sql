@@ -32,7 +32,8 @@ CREATE TABLE expense_categories (
   name VARCHAR(255) NOT NULL UNIQUE,
   description TEXT,
   is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
 CREATE TABLE expenses (

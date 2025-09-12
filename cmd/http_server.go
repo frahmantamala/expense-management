@@ -13,6 +13,8 @@ import (
 	"github.com/frahmantamala/expense-management/internal"
 	auth "github.com/frahmantamala/expense-management/internal/auth"
 	authPostgres "github.com/frahmantamala/expense-management/internal/auth/postgres"
+	"github.com/frahmantamala/expense-management/internal/category"
+	categoryPostgres "github.com/frahmantamala/expense-management/internal/category/postgres"
 	"github.com/frahmantamala/expense-management/internal/expense"
 	expensePostgres "github.com/frahmantamala/expense-management/internal/expense/postgres"
 	"github.com/frahmantamala/expense-management/internal/payment"
@@ -146,12 +148,17 @@ func setupRoutes(deps *Dependencies) {
 	expenseHandler := expense.NewHandler(expenseService)
 	deps.ExpenseHandler = expenseHandler
 
+	// Category repository and service
+	categoryRepo := categoryPostgres.NewCategoryRepository(deps.DB)
+	categoryService := category.NewService(categoryRepo, deps.Logger)
+	categoryHandler := category.NewHandler(expenseHandler.BaseHandler, categoryService)
+
 	// Payment handler
 	paymentHandler := payment.NewHandler(expenseService, deps.Logger)
 	deps.PaymentHandler = paymentHandler
 
 	sqlDBForRoutes, _ := deps.DB.DB()
-	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler, deps.ExpenseHandler, deps.PaymentHandler)
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler, deps.ExpenseHandler, categoryHandler, deps.PaymentHandler)
 }
 
 func initializeDependencies() (*Dependencies, error) {

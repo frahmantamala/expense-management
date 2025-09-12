@@ -2,17 +2,14 @@
 
 Expense management where are handle some functionality like create expense, approve and reject expense. This Expense also integrate with payment mocking api. 
 
-## 🐳 Quick Start with Docker (Recommended for Reviewers)
 
-For the fastest setup experience, use Docker Compose:
+Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/frahmantamala/expense-management.git
 cd expense-management
 
-# Start with Docker (includes database, migrations, and seeding)
-docker compose up -d
 
 # Access the application
 # API: http://localhost:8080
@@ -22,13 +19,11 @@ or
 # Swagger: http://localhost:8081/swagger/index.html
 ```
 
-**Pre-seeded users:**
+**Seeding users:**
 - Admin: `padil@mail.com` / `password` (can approve/reject)
 - User: `fadhil@mail.com` / `password` (can only create)
 
-📚 **For detailed Docker usage, see [DOCKER.md](DOCKER.md)**
-
-## 🛠️ Development Setup
+## Development Setup
 
 ### Prerequisites
 - Go 1.23+
@@ -60,10 +55,6 @@ cd expense-management
 
 make docker-up
 ```
-
-The user you can refer from seeder data. 
-1. User (fadhil@mail.com) (password)
-2. Approver (padil@mail.com) (password)
 
 The API will be available at `http://localhost:8080` with Swagger docs at `/swagger/index.html`.
 
@@ -155,9 +146,6 @@ make seed              # Seed test data
 make generate.openapi  # Generate API types
 ```
 
-### Testing Payment Failures
-Use amounts ending in `8888888` or `9999999` to trigger payment failures for testing retry functionality.
-
 ### Environment Variables
 ```bash
 DB_SOURCE=postgresql://user:pass@localhost:5432/dbname
@@ -165,12 +153,8 @@ JWT_SECRET=your-secret-key
 BCRYPT_COST=10
 ```
 
-## Assumptions & Trade-offs
-
 ### Assumptions Made
 - Single currency (IDR) business requirement
 - Manual approval threshold at 1M IDR is business rule
 - Payment gateway provides external_id for tracking
 - Users belong to single role no multi-role complexity
-
-The current implementation prioritizes core functionality and demonstrates architectural patterns suitable for production scaling.
