@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
@@ -74,28 +73,6 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 	if err != nil {
 		s.logger.Error("payment record not found", "external_id", req.ExternalID, "error", err)
 		return nil, fmt.Errorf("payment record not found: %w", err)
-	}
-
-	// Testing: Simulate payment failure for specific amounts or external IDs
-	if s.shouldSimulateFailure(req) {
-		s.logger.Info("simulating payment failure for testing",
-			"external_id", req.ExternalID,
-			"amount", req.Amount)
-
-		// Update payment status to failed
-		failureReason := "Simulated failure for testing"
-		err = s.repository.UpdateStatus(paymentRecord.ID, payment.StatusFailed, nil, nil, &failureReason)
-		if err != nil {
-			s.logger.Error("failed to update payment status to failed", "error", err, "payment_id", paymentRecord.ID)
-		}
-
-		return &PaymentResponse{
-			Data: PaymentData{
-				ID:         fmt.Sprintf("failed-%s", req.ExternalID),
-				ExternalID: req.ExternalID,
-				Status:     PaymentStatusFailed,
-			},
-		}, nil
 	}
 
 	// Prepare request body
@@ -189,26 +166,6 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 		"status", paymentResp.Data.Status)
 
 	return &paymentResp, nil
-}
-
-// simulate fail case
-func (s *PaymentService) shouldSimulateFailure(req *PaymentRequest) bool {
-	failureAmounts := []int64{
-		9999999,
-		8888888,
-	}
-
-	for _, failAmount := range failureAmounts {
-		if req.Amount == failAmount || req.Amount%failAmount == 0 {
-			return true
-		}
-	}
-
-	if strings.Contains(strings.ToLower(req.ExternalID), "fail") {
-		return true
-	}
-
-	return false
 }
 
 // RetryPayment retries a failed payment

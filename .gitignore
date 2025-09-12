@@ -55,6 +55,7 @@ tmp
 /report.json
 *.test
 cover.out.*
+coverage.out*
 report.json
 cert
 .run/

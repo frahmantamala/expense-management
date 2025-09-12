@@ -29,6 +29,12 @@ make run
 
 The API will be available at `http://localhost:8080` with Swagger docs at `/swagger/index.html`.
 
+# To running test
+```bash
+# Run unit test
+make test
+```
+
 ## Business Logic
 
 ### Expense Approval
@@ -43,8 +49,8 @@ The API will be available at `http://localhost:8080` with Swagger docs at `/swag
 - Failed payments can be retried by authorized users
 
 ### Permission System
-- **Employee**: Submit and view own expenses
-- **Manager**: Approve/reject expenses, retry failed payments
+- **User**: Submit and view own expenses
+- **Approver**: Approve/reject expenses, retry failed payments
 - **Admin**: Full system access
 
 ## API Examples

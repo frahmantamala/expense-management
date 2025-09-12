@@ -77,7 +77,6 @@ var (
 	ErrUserInactive       = errors.New("user is inactive")
 )
 
-// ToV1 converts internal AuthInfo domain model to API-ready view model.
 func (a AuthInfo) ToV1() AuthResponseV1 {
 	return AuthResponseV1{
 		ID:    a.UserID,

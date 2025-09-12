@@ -30,21 +30,38 @@ var seedCmd = &cobra.Command{
 		password := "password"
 		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-		email := "fadhil@mail.com"
-		name := "Fadhil"
+		fadhilEmail := "fadhil@mail.com"
+		fadhilName := "Fadhil"
 		var exists int
-		row := db.Raw("SELECT 1 FROM users WHERE email = ?", email).Row()
-		userExists := false
+		row := db.Raw("SELECT 1 FROM users WHERE email = ?", fadhilEmail).Row()
+		fadhilExists := false
 		if err := row.Scan(&exists); err == nil {
-			fmt.Println("admin user already exists; will ensure permissions")
-			userExists = true
+			fmt.Println("fadhil user already exists; will ensure permissions")
+			fadhilExists = true
 		}
 
-		if !userExists {
-			if err := db.Exec("INSERT INTO users (email, name, password_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, true, now(), now())", email, name, string(hash)).Error; err != nil {
+		if !fadhilExists {
+			if err := db.Exec("INSERT INTO users (email, name, password_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, true, now(), now())", fadhilEmail, fadhilName, string(hash)).Error; err != nil {
+				log.Fatalf("failed to insert fadhil user: %v", err)
+			}
+			fmt.Println("Seeded fadhil user:", fadhilEmail)
+		}
+
+		// Create admin user (can approve/reject expenses)
+		adminEmail := "padil@mail.com"
+		adminName := "Padil Admin"
+		row = db.Raw("SELECT 1 FROM users WHERE email = ?", adminEmail).Row()
+		adminExists := false
+		if err := row.Scan(&exists); err == nil {
+			fmt.Println("admin user already exists; will ensure permissions")
+			adminExists = true
+		}
+
+		if !adminExists {
+			if err := db.Exec("INSERT INTO users (email, name, password_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, true, now(), now())", adminEmail, adminName, string(hash)).Error; err != nil {
 				log.Fatalf("failed to insert admin user: %v", err)
 			}
-			fmt.Println("Seeded admin user:", email)
+			fmt.Println("Seeded admin user:", adminEmail)
 		}
 
 		// seed permissions
@@ -72,10 +89,10 @@ var seedCmd = &cobra.Command{
 			}
 		}
 
-		// grant permissions to user
-		var userID int64
-		if err := db.Raw("SELECT id FROM users WHERE email = ?", email).Row().Scan(&userID); err != nil {
-			log.Fatalf("failed to lookup user id: %v", err)
+		// grant full permissions to admin user
+		var adminUserID int64
+		if err := db.Raw("SELECT id FROM users WHERE email = ?", adminEmail).Row().Scan(&adminUserID); err != nil {
+			log.Fatalf("failed to lookup admin user id: %v", err)
 		}
 
 		for _, p := range permissions {
@@ -85,16 +102,42 @@ var seedCmd = &cobra.Command{
 			}
 
 			var exists int
-			if err := db.Raw("SELECT 1 FROM user_permissions WHERE user_id = ? AND permission_id = ?", userID, pid).Row().Scan(&exists); err == nil {
+			if err := db.Raw("SELECT 1 FROM user_permissions WHERE user_id = ? AND permission_id = ?", adminUserID, pid).Row().Scan(&exists); err == nil {
 				continue
 			}
 
-			if err := db.Exec("INSERT INTO user_permissions (user_id, permission_id, granted_by, created_at) VALUES (?, ?, NULL, now())", userID, pid).Error; err != nil {
-				log.Fatalf("failed to grant permission %s to user: %v", p.Name, err)
+			if err := db.Exec("INSERT INTO user_permissions (user_id, permission_id, granted_by, created_at) VALUES (?, ?, NULL, now())", adminUserID, pid).Error; err != nil {
+				log.Fatalf("failed to grant permission %s to admin user: %v", p.Name, err)
 			}
 		}
 
-		fmt.Println("Granted permissions to:", email)
+		fmt.Println("Granted all permissions to admin user:", adminEmail)
+
+		// grant limited permissions to fadhil user (only create expenses)
+		var fadhilUserID int64
+		if err := db.Raw("SELECT id FROM users WHERE email = ?", fadhilEmail).Row().Scan(&fadhilUserID); err != nil {
+			log.Fatalf("failed to lookup fadhil user id: %v", err)
+		}
+
+		// Fadhil user gets only create expenses permission
+		fadhilUserPermissions := []string{"view_expenses", "create_expenses"}
+		for _, permName := range fadhilUserPermissions {
+			var pid int64
+			if err := db.Raw("SELECT id FROM permissions WHERE name = ?", permName).Row().Scan(&pid); err != nil {
+				log.Fatalf("permission not found %s: %v", permName, err)
+			}
+
+			var exists int
+			if err := db.Raw("SELECT 1 FROM user_permissions WHERE user_id = ? AND permission_id = ?", fadhilUserID, pid).Row().Scan(&exists); err == nil {
+				continue
+			}
+
+			if err := db.Exec("INSERT INTO user_permissions (user_id, permission_id, granted_by, created_at) VALUES (?, ?, NULL, now())", fadhilUserID, pid).Error; err != nil {
+				log.Fatalf("failed to grant permission %s to fadhil user: %v", permName, err)
+			}
+		}
+
+		fmt.Println("Granted limited permissions to fadhil user (can only create expenses):", fadhilEmail)
 
 		// seed expense categories
 		categories := []struct {

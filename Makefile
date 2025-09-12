@@ -8,7 +8,8 @@ STEP ?= 0
 
 .PHONY: build run migrate migrate.rollback migration migration.go generate.openapi \
         swagger seed seed-fresh deps dev-setup dev-setup-with-data docker-build docker-run \
-        lint clean test
+        lint clean test test-coverage test-cover test-auth test-payment test-expense \
+        test-postgres test-race test-short test-flaky test-summary
 
 # Build the application (expects main.go)
 build:
@@ -67,9 +68,65 @@ migrate.rollback:
 swagger:
 	@swag init -g cmd/http_server.go -o ./internal/transport/swagger --parseDependency --parseInternal || true
 
-# Run tests
+# Run all tests
 test:
+	@echo "Running all tests..."
 	go test ./... -v
+
+# Run tests with coverage
+test-coverage:
+	@echo "Running tests with coverage..."
+	go test ./... -v -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# Run tests and show coverage summary
+test-cover:
+	@echo "Running tests with coverage summary..."
+	go test ./... -v -coverprofile=coverage.out
+	go tool cover -func=coverage.out
+
+# Run specific module tests
+test-auth:
+	@echo "Running auth module tests..."
+	go test ./internal/auth -v
+
+test-payment:
+	@echo "Running payment module tests..."
+	go test ./internal/payment -v
+
+test-expense:
+	@echo "Running expense module tests..."
+	go test ./internal/expense -v
+
+test-postgres:
+	@echo "Running PostgreSQL repository tests..."
+	go test ./internal/payment/postgres ./internal/expense/postgres -v
+
+# Run tests with race detection
+test-race:
+	@echo "Running tests with race detection..."
+	go test ./... -v -race
+
+# Run tests in short mode (skip long-running tests)
+test-short:
+	@echo "Running tests in short mode..."
+	go test ./... -v -short
+
+# Run tests multiple times to catch flaky tests
+test-flaky:
+	@echo "Running tests 10 times to catch flaky tests..."
+	go test ./... -v -count=10
+
+# Test summary - show test counts per module
+test-summary:
+	@echo "=== TEST SUMMARY ==="
+	@echo "Auth: $$(go test ./internal/auth -v | grep 'Ran.*Specs' | awk '{print $$2" tests"}' || echo 'No tests')"
+	@echo "Payment Service: $$(go test ./internal/payment -v | grep 'Ran.*Specs' | awk '{print $$2" tests"}' || echo 'No tests')"
+	@echo "Expense Service: $$(go test ./internal/expense -v | grep 'Ran.*Specs' | awk '{print $$2" tests"}' || echo 'No tests')"
+	@echo "Payment PostgreSQL: $$(go test ./internal/payment/postgres -v | grep 'Ran.*Specs' | awk '{print $$2" tests"}' || echo 'No tests')"
+	@echo "Expense PostgreSQL: $$(go test ./internal/expense/postgres -v | grep 'Ran.*Specs' | awk '{print $$2" tests"}' || echo 'No tests')"
+	@echo "================================"
 
 # Clean build artifacts
 clean:

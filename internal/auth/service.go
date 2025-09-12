@@ -16,7 +16,6 @@ type UserRepository interface {
 	GetUserWithPermissions(userID int64) (*User, error)
 }
 
-// Service is the main auth service with dependencies
 type Service struct {
 	userRepo       UserRepository
 	tokenGenerator TokenGenerator
@@ -41,12 +40,10 @@ func NewJWTTokenGenerator(accessSecret, refreshSecret string, accessTTL, refresh
 }
 
 func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
-	// Validate input
 	if err := dto.Validate(); err != nil {
 		return AuthTokens{}, err
 	}
 
-	// Get user credentials
 	storedHash, userID, err := s.userRepo.GetPasswordForUsername(dto.Email)
 	if err != nil {
 		return AuthTokens{}, ErrInvalidCredentials
@@ -152,14 +149,12 @@ func (j *JWTTokenGenerator) GenerateRefreshToken(userID string, email string) (s
 
 func (j *JWTTokenGenerator) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		// Check signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
-		// Try access token secret first, then refresh token secret
+		// try access token secret first, then refresh token secret
 		if claims, ok := token.Claims.(*Claims); ok {
-			// For refresh tokens, use refresh secret
 			if time.Until(claims.ExpiresAt.Time) > j.AccessTokenTTL {
 				return j.RefreshTokenSecret, nil
 			}
