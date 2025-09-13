@@ -25,20 +25,3 @@ type ExpenseCategory struct {
 	IsActive    bool
 	CreatedAt   time.Time
 }
-
-type Payment struct {
-	ID                      int64
-	ExpenseID               int64
-	AmountIDR               int64
-	ExternalID              string
-	PaymentAPIID            *string
-	PaymentStatus           string
-	PaymentProviderResponse map[string]interface{}
-	ErrorMessage            *string
-	RetryCount              int
-	InitiatedAt             time.Time
-	CompletedAt             *time.Time
-	FailedAt                *time.Time
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
-}

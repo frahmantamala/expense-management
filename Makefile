@@ -1,6 +1,6 @@
 # Makefile for Expense Management (adapt as needed)
 
-MODULE ?= github.com/yourusername/expense-management
+MODULE ?= github.com/frahmantamala/expense-management
 OPENAPI ?= api/openapi.yml
 OAPI_CFG ?= api/oapi_codegen.yaml
 DB_SOURCE ?= postgresql://root:secret@localhost:5432/expense_management_db?sslmode=disable

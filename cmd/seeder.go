@@ -8,10 +8,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	clearData bool
-)
-
 var seedCmd = &cobra.Command{
 	Use:   "seed",
 	Short: "Seed the database with sample data",
@@ -165,9 +161,4 @@ var seedCmd = &cobra.Command{
 
 		fmt.Println("Expense categories seeded successfully")
 	},
-}
-
-func init() {
-	seedCmd.Flags().BoolVar(&clearData, "clear", false, "Clear existing data before seeding")
-	rootCmd.AddCommand(seedCmd)
 }

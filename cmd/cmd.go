@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	clearData bool
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "expense-management",
 	Short: "Expense Management",
@@ -56,6 +60,9 @@ func loadConfig(path string) (*internal.Config, error) {
 }
 
 func init() {
+	seedCmd.Flags().BoolVar(&clearData, "clear", false, "Clear existing data before seeding")
+
 	rootCmd.AddCommand(httpServerCmd)
 	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(seedCmd)
 }
