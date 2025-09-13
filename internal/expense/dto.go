@@ -1,8 +1,10 @@
 package expense
 
 import (
-	"errors"
 	"time"
+
+	errors "github.com/frahmantamala/expense-management/internal"
+	"github.com/frahmantamala/expense-management/internal/core/common/validation"
 )
 
 type Expense struct {
@@ -35,30 +37,27 @@ type CreateExpenseDTO struct {
 }
 
 func (dto CreateExpenseDTO) Validate() error {
-	if dto.AmountIDR <= 0 {
-		return errors.New("amount must be positive")
-	}
-	if dto.AmountIDR < 10000 {
-		return errors.New("amount must be at least 10,000 IDR")
-	}
-	if dto.AmountIDR > 50000000 {
-		return errors.New("amount must not exceed 50,000,000 IDR")
-	}
-	if dto.Description == "" {
-		return errors.New("description is required")
-	}
-	if len(dto.Description) > 500 {
-		return errors.New("description must be less than 500 characters")
-	}
-	if dto.Category == "" {
-		return errors.New("category is required")
-	}
-	if dto.ExpenseDate.IsZero() {
-		return errors.New("expense date is required")
-	}
+	validator := validation.NewValidator()
 
-	if dto.ExpenseDate.After(time.Now()) {
-		return errors.New("expense date cannot be in the future")
+	validator.Field("amount_idr", dto.AmountIDR).
+		Required().
+		MinInt(1, errors.ErrCodeInvalidAmount).
+		MinInt(10000, errors.ErrCodeAmountTooLow).
+		MaxInt(50000000, errors.ErrCodeAmountTooHigh)
+
+	validator.Field("description", dto.Description).
+		Required().
+		MinLength(1).
+		MaxLength(500)
+
+	validator.Field("category", dto.Category).
+		Required()
+
+	validator.Field("expense_date", dto.ExpenseDate).
+		NotFuture()
+
+	if appErr := validator.Validate(); appErr != nil {
+		return appErr
 	}
 	return nil
 }
@@ -70,13 +69,13 @@ type UpdateExpenseStatusDTO struct {
 
 func (dto UpdateExpenseStatusDTO) Validate() error {
 	if dto.Status == "" {
-		return errors.New("status is required")
+		return errors.NewValidationError("status is required", errors.ErrCodeValidationFailed)
 	}
 	if dto.Status != "approved" && dto.Status != "rejected" {
-		return errors.New("status must be either 'approved' or 'rejected'")
+		return errors.NewValidationError("status must be either 'approved' or 'rejected'", errors.ErrCodeValidationFailed)
 	}
 	if dto.Status == "rejected" && dto.Reason == "" {
-		return errors.New("reason is required when rejecting an expense")
+		return errors.NewValidationError("reason is required when rejecting an expense", errors.ErrCodeValidationFailed)
 	}
 	return nil
 }
@@ -87,7 +86,7 @@ type RejectExpenseDTO struct {
 
 func (dto RejectExpenseDTO) Validate() error {
 	if dto.Reason == "" {
-		return errors.New("reason is required when rejecting an expense")
+		return errors.NewValidationError("reason is required when rejecting an expense", errors.ErrCodeValidationFailed)
 	}
 	return nil
 }
@@ -101,8 +100,8 @@ const (
 const AutoApprovalThreshold = 1000000
 
 var (
-	ErrExpenseNotFound      = errors.New("expense not found")
-	ErrUnauthorizedAccess   = errors.New("unauthorized access to expense")
-	ErrInvalidExpenseStatus = errors.New("invalid expense status for this operation")
-	ErrCannotModifyExpense  = errors.New("cannot modify expense in current status")
+	ErrExpenseNotFound      = errors.ErrExpenseNotFound
+	ErrUnauthorizedAccess   = errors.ErrUnauthorizedAccess
+	ErrInvalidExpenseStatus = errors.ErrInvalidExpenseStatus
+	ErrCannotModifyExpense  = errors.ErrCannotModifyExpense
 )

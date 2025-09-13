@@ -47,20 +47,7 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 	expense, err := h.Service.CreateExpense(user.ID, dto)
 	if err != nil {
 		h.Logger.Error("CreateExpense: service error", "error", err, "user_id", user.ID)
-
-		if err.Error() == "amount must be positive" ||
-			err.Error() == "amount must be at least 10,000 IDR" ||
-			err.Error() == "amount must not exceed 50,000,000 IDR" ||
-			err.Error() == "description is required" ||
-			err.Error() == "category is required" ||
-			err.Error() == "expense date is required" ||
-			err.Error() == "expense date cannot be in the future" ||
-			err.Error() == "description must be less than 500 characters" {
-			h.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		h.WriteError(w, http.StatusInternalServerError, "failed to create expense")
+		h.HandleServiceError(w, err)
 		return
 	}
 
@@ -94,15 +81,7 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 	expense, err := h.Service.GetExpenseByID(expenseID, user.ID, isManager)
 	if err != nil {
 		h.Logger.Error("GetExpense: service error", "error", err, "expense_id", expenseID, "user_id", user.ID)
-
-		switch err {
-		case ErrExpenseNotFound:
-			h.WriteError(w, http.StatusNotFound, "expense not found")
-		case ErrUnauthorizedAccess:
-			h.WriteError(w, http.StatusForbidden, "access denied")
-		default:
-			h.WriteError(w, http.StatusInternalServerError, "failed to get expense")
-		}
+		h.HandleServiceError(w, err)
 		return
 	}
 

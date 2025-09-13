@@ -1,8 +1,8 @@
 package payment
 
 import (
-	"errors"
-	"fmt"
+	errors "github.com/frahmantamala/expense-management/internal"
+	"github.com/frahmantamala/expense-management/internal/core/common/validation"
 )
 
 // PaymentRequest represents the request payload for payment API
@@ -30,17 +30,6 @@ const (
 	PaymentStatusFailed  = "failed"
 )
 
-// Validation
-func (p *PaymentRequest) Validate() error {
-	if p.Amount <= 0 {
-		return errors.New("amount must be greater than 0")
-	}
-	if p.ExternalID == "" {
-		return errors.New("external_id is required")
-	}
-	return nil
-}
-
 // PaymentRetryRequest represents retry request
 type PaymentRetryRequest struct {
 	ExternalID string `json:"external_id" validate:"required"`
@@ -49,27 +38,25 @@ type PaymentRetryRequest struct {
 
 // Validate validates the PaymentRetryRequest
 func (r *PaymentRetryRequest) Validate() error {
-	if r.ExternalID == "" {
-		return errors.New("external_id is required")
-	}
-	if r.ExpenseID == "" {
-		return errors.New("expense_id is required")
+	validator := validation.NewValidator()
+
+	validator.Field("external_id", r.ExternalID).Required()
+	validator.Field("expense_id", r.ExpenseID).Required()
+
+	if appErr := validator.Validate(); appErr != nil {
+		return appErr
 	}
 	return nil
 }
 
-// CreatePaymentRequest creates a payment request for an expense
-func CreatePaymentRequest(expenseID int64, amount int64) *PaymentRequest {
-	return &PaymentRequest{
-		Amount:     amount,
-		ExternalID: fmt.Sprintf("expense-%d-%d", expenseID, amount), // Simple external ID format
-	}
-}
+func (p *PaymentRequest) Validate() error {
+	validator := validation.NewValidator()
 
-// CreateFailureTestPaymentRequest creates a payment request that will simulate failure
-func CreateFailureTestPaymentRequest(expenseID int64, amount int64) *PaymentRequest {
-	return &PaymentRequest{
-		Amount:     amount,
-		ExternalID: fmt.Sprintf("expense-%d-%d-fail", expenseID, amount), // Contains "fail" to trigger simulation
+	validator.Field("amount", p.Amount).Required().MinInt(10001, errors.ErrCodeInvalidAmount)
+	validator.Field("external_id", p.ExternalID).Required()
+
+	if appErr := validator.Validate(); appErr != nil {
+		return appErr
 	}
+	return nil
 }
