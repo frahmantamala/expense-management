@@ -20,9 +20,6 @@ type RepositoryAPI interface {
 	GetLatestByExpenseID(expenseID int64) (*payment.Payment, error)
 	UpdateStatus(id int64, status string, paymentMethod *string, gatewayResponse json.RawMessage, failureReason *string) error
 	IncrementRetryCount(id int64) error
-	GetFailedPayments(limit int) ([]*payment.Payment, error)
-	GetPaymentsByStatus(status string, offset, limit int) ([]*payment.Payment, error)
-	GetPaymentStats() (map[string]int64, error)
 }
 
 type PaymentService struct {

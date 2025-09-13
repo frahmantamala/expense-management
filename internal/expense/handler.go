@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/frahmantamala/expense-management/internal/auth"
+	"github.com/frahmantamala/expense-management/internal"
 	"github.com/frahmantamala/expense-management/internal/transport"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 	"github.com/go-chi/chi"
@@ -15,8 +15,6 @@ import (
 type ServiceAPI interface {
 	CreateExpense(req *CreateExpenseDTO, userID int64) (*Expense, error)
 	GetExpenseByID(expenseID int64, userID int64, userPermissions []string) (*Expense, error)
-	GetExpensesByUserID(userID int64, userPermissions []string) ([]*Expense, error)
-	GetUserExpenses(userID int64, limit, offset int) ([]*Expense, error)
 	GetExpensesForUser(userID int64, userPermissions []string, params *ExpenseQueryParams) ([]*Expense, error)
 	UpdateExpenseStatus(expenseID int64, status string, userID int64, userPermissions []string) (*Expense, error)
 	SubmitExpenseForApproval(expenseID int64, userID int64, userPermissions []string) (*Expense, error)
@@ -42,7 +40,7 @@ func NewHandler(service ServiceAPI) *Handler {
 }
 
 func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := internal.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("CreateExpense: user not found in context")
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")
@@ -73,7 +71,7 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := internal.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("GetExpense: user not found in context")
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")
@@ -98,46 +96,9 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 	h.WriteJSON(w, http.StatusOK, expense)
 }
 
-func (h *Handler) GetUserExpenses(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok || user == nil {
-		h.Logger.Error("GetUserExpenses: user not found in context")
-		h.WriteError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	limit := 20
-	offset := 0
-
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
-
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
-
-	expenses, err := h.Service.GetUserExpenses(user.ID, limit, offset)
-	if err != nil {
-		h.Logger.Error("GetUserExpenses: service error", "error", err, "user_id", user.ID)
-		h.WriteError(w, http.StatusInternalServerError, "failed to get expenses")
-		return
-	}
-
-	h.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"expenses": expenses,
-		"limit":    limit,
-		"offset":   offset,
-	})
-}
-
 // GetAllExpenses retrieves all expenses for managers/admins
 func (h *Handler) GetAllExpenses(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := internal.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("GetAllExpenses: user not found in context")
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")
@@ -203,7 +164,7 @@ func (h *Handler) GetAllExpenses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ApproveExpense(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := internal.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("ApproveExpense: user not found in context")
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")
@@ -239,7 +200,7 @@ func (h *Handler) ApproveExpense(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RejectExpense(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := internal.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("RejectExpense: user not found in context")
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")

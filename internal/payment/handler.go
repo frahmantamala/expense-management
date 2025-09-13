@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	errors "github.com/frahmantamala/expense-management/internal"
-	"github.com/frahmantamala/expense-management/internal/auth"
 	"github.com/frahmantamala/expense-management/internal/transport"
 )
 
@@ -32,7 +31,7 @@ func NewHandler(expenseService ExpenseServiceAPI, paymentService ServiceAPI, log
 
 // RetryPayment handles POST /api/v1/payment/retry
 func (h *Handler) RetryPayment(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := errors.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("RetryPayment: user not found in context")
 		h.HandleError(w, errors.NewUnauthorizedError("authentication required", errors.ErrCodeInvalidToken))

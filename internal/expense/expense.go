@@ -29,14 +29,6 @@ const (
 	AutoApprovalThreshold        = 100000
 )
 
-func (e *Expense) CanBeAccessedBy(userID int64, userPermissions []string) bool {
-	if e.UserID == userID {
-		return true
-	}
-
-	return HasManagerPermissions(userPermissions)
-}
-
 func (e *Expense) CanBeApproved() bool {
 	return e.ExpenseStatus == ExpenseStatusPendingApproval
 }
@@ -65,27 +57,6 @@ func (e *Expense) Reject() {
 
 func (e *Expense) NeedsPaymentProcessing() bool {
 	return e.ExpenseStatus == ExpenseStatusApproved
-}
-
-func HasManagerPermissions(userPermissions []string) bool {
-	managerPerms := []string{"approve_expenses", "reject_expenses", "admin"}
-	return HasAnyPermission(userPermissions, managerPerms)
-}
-
-func HasAnyPermission(userPermissions []string, requiredPermissions []string) bool {
-	for _, userPerm := range userPermissions {
-		for _, requiredPerm := range requiredPermissions {
-			if userPerm == requiredPerm {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func CanViewAllExpenses(userPermissions []string) bool {
-	managerPermissions := []string{"admin", "approve_expenses", "reject_expenses"}
-	return HasAnyPermission(userPermissions, managerPermissions)
 }
 
 func NewExpense(userID int64, dto CreateExpenseDTO) *Expense {

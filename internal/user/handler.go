@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/frahmantamala/expense-management/internal/auth"
+	"github.com/frahmantamala/expense-management/internal"
 	"github.com/frahmantamala/expense-management/internal/transport"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 )
@@ -34,7 +34,7 @@ func NewHandler(svc ServiceAPI) *Handler {
 func (h *Handler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	h.Logger.Info("GetCurrentUser: starting request")
 
-	user, ok := auth.UserFromContext(r.Context())
+	user, ok := internal.UserFromContext(r.Context())
 	if !ok || user == nil {
 		h.Logger.Error("GetCurrentUser: user not found in context", "ok", ok, "user_nil", user == nil)
 		h.WriteError(w, http.StatusUnauthorized, "unauthorized")

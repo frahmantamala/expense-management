@@ -3,23 +3,30 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Service implements the ServiceAPI
 type Service struct {
-	userRepo       RepositoryAPI
-	tokenGenerator TokenGeneratorAPI
-	bcryptCost     int
+	userRepo          RepositoryAPI
+	tokenGenerator    TokenGeneratorAPI
+	permissionChecker PermissionChecker
+	rbacAuthorization *RBACAuthorization
+	bcryptCost        int
+	logger            *slog.Logger
 }
 
-func NewService(userRepo RepositoryAPI, tokenGen TokenGeneratorAPI, bcryptCost int) *Service {
+func NewService(userRepo RepositoryAPI, tokenGen TokenGeneratorAPI, bcryptCost int, logger *slog.Logger) *Service {
+	permChecker := NewPermissionChecker()
 	return &Service{
-		userRepo:       userRepo,
-		tokenGenerator: tokenGen,
-		bcryptCost:     bcryptCost,
+		userRepo:          userRepo,
+		tokenGenerator:    tokenGen,
+		permissionChecker: permChecker,
+		rbacAuthorization: NewRBACAuthorization(permChecker.(*DefaultPermissionChecker), logger),
+		bcryptCost:        bcryptCost,
+		logger:            logger,
 	}
 }
 
@@ -42,12 +49,10 @@ func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
 		return AuthTokens{}, ErrInvalidCredentials
 	}
 
-	// Verify password
 	if err := VerifyPassword(storedHash, dto.Password); err != nil {
 		return AuthTokens{}, ErrInvalidCredentials
 	}
 
-	// Generate tokens with email included
 	accessToken, err := s.tokenGenerator.GenerateAccessToken(userID, dto.Email)
 	if err != nil {
 		return AuthTokens{}, err
@@ -65,13 +70,12 @@ func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
 }
 
 func (s *Service) RefreshTokens(refreshToken string) (AuthTokens, error) {
-	// Validate refresh token
+
 	claims, err := s.tokenGenerator.ValidateToken(refreshToken)
 	if err != nil {
 		return AuthTokens{}, err
 	}
 
-	// Generate new tokens with email from existing claims
 	accessToken, err := s.tokenGenerator.GenerateAccessToken(claims.UserID, claims.Email)
 	if err != nil {
 		return AuthTokens{}, err
@@ -146,7 +150,6 @@ func (j *JWTTokenGenerator) ValidateToken(tokenString string) (*Claims, error) {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
-		// try access token secret first, then refresh token secret
 		if claims, ok := token.Claims.(*Claims); ok {
 			if time.Until(claims.ExpiresAt.Time) > j.AccessTokenTTL {
 				return j.RefreshTokenSecret, nil
@@ -171,4 +174,12 @@ func (j *JWTTokenGenerator) ValidateToken(tokenString string) (*Claims, error) {
 
 func (s *Service) HashPassword(password string) (string, error) {
 	return HashPassword(password, s.bcryptCost)
+}
+
+func (s *Service) PermissionChecker() PermissionChecker {
+	return s.permissionChecker
+}
+
+func (s *Service) RBACAuthorization() *RBACAuthorization {
+	return s.rbacAuthorization
 }

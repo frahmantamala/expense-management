@@ -541,44 +541,6 @@ var _ = Describe("ExpenseService", func() {
 		})
 	})
 
-	Describe("GetUserExpenses", func() {
-		Context("when user has expenses", func() {
-			It("should return user's expenses", func() {
-				// Given
-				userID := int64(123)
-				testExpense1 := &expense.Expense{ID: 1, UserID: userID, AmountIDR: 25000}
-				testExpense2 := &expense.Expense{ID: 2, UserID: userID, AmountIDR: 50000}
-				mockRepo.expensesByUser[userID] = []*expenseDatamodel.Expense{
-					expense.ToDataModel(testExpense1),
-					expense.ToDataModel(testExpense2),
-				}
-
-				// When
-				result, err := expenseService.GetUserExpenses(userID, 10, 0)
-
-				// Then
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result).To(HaveLen(2))
-				Expect(result[0].UserID).To(Equal(userID))
-				Expect(result[1].UserID).To(Equal(userID))
-			})
-		})
-
-		Context("when user has no expenses", func() {
-			It("should return empty list", func() {
-				// Given
-				userID := int64(999)
-
-				// When
-				result, err := expenseService.GetUserExpenses(userID, 10, 0)
-
-				// Then
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result).To(HaveLen(0))
-			})
-		})
-	})
-
 	Describe("GetAllExpenses", func() {
 		Context("when there are expenses", func() {
 			It("should return all expenses", func() {
@@ -630,7 +592,7 @@ var _ = Describe("ExpenseService", func() {
 					UpdatedAt:     time.Now(),
 				}
 				mockRepo.expenses[123] = expense.ToDataModel(testExpense)
-				permissions := []string{"approve_expenses"} // Use correct permission string
+				permissions := []string{"retry_payments"} // Use correct permission for payment retry
 
 				// When
 				err := expenseService.RetryPayment(expenseID, permissions)

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/frahmantamala/expense-management/internal/auth"
 	expenseDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/expense"
 )
 
@@ -24,16 +25,18 @@ type PaymentProcessorAPI interface {
 }
 
 type Service struct {
-	repo             RepositoryAPI
-	paymentProcessor PaymentProcessorAPI
-	logger           *slog.Logger
+	repo              RepositoryAPI
+	paymentProcessor  PaymentProcessorAPI
+	permissionChecker auth.PermissionChecker
+	logger            *slog.Logger
 }
 
 func NewService(repo RepositoryAPI, paymentProcessor PaymentProcessorAPI, logger *slog.Logger) *Service {
 	return &Service{
-		repo:             repo,
-		paymentProcessor: paymentProcessor,
-		logger:           logger,
+		repo:              repo,
+		paymentProcessor:  paymentProcessor,
+		permissionChecker: auth.NewPermissionChecker(),
+		logger:            logger,
 	}
 }
 
@@ -82,17 +85,14 @@ func (s *Service) GetExpenseByID(id, userID int64, userPermissions []string) (*E
 	// Convert to domain entity
 	expense := FromDataModel(expenseData)
 
-	if !expense.CanBeAccessedBy(userID, userPermissions) {
+	// Check if user can access this expense (own expense or manager)
+	canAccess := expense.UserID == userID || s.permissionChecker.CanViewAllExpenses(userPermissions)
+	if !canAccess {
 		s.logger.Warn("unauthorized access to expense", "expense_id", id, "user_id", userID, "expense_user_id", expense.UserID)
 		return nil, ErrUnauthorizedAccess
 	}
 
 	return expense, nil
-}
-
-func (s *Service) GetExpensesByUserID(userID int64, userPermissions []string) ([]*Expense, error) {
-	// This is a wrapper around GetUserExpenses with no pagination
-	return s.GetUserExpenses(userID, 100, 0) // Default limit
 }
 
 func (s *Service) UpdateExpenseStatus(expenseID int64, status string, userID int64, userPermissions []string) (*Expense, error) {
@@ -110,23 +110,6 @@ func (s *Service) SubmitExpenseForApproval(expenseID int64, userID int64, userPe
 	return s.UpdateExpenseStatus(expenseID, "submitted", userID, userPermissions)
 }
 
-func (s *Service) GetUserExpenses(userID int64, limit, offset int) ([]*Expense, error) {
-	// Convert limit/offset to ExpenseQueryParams for backward compatibility
-	params := &ExpenseQueryParams{
-		PerPage: limit,
-		Page:    (offset / limit) + 1,
-	}
-	params.SetDefaults()
-
-	expensesData, err := s.repo.GetByUserID(userID, params)
-	if err != nil {
-		s.logger.Error("failed to get user expenses", "error", err, "user_id", userID)
-		return nil, err
-	}
-
-	return FromDataModelSlice(expensesData), nil
-}
-
 func (s *Service) GetAllExpenses(params *ExpenseQueryParams) ([]*Expense, error) {
 	params.SetDefaults()
 
@@ -142,7 +125,7 @@ func (s *Service) GetAllExpenses(params *ExpenseQueryParams) ([]*Expense, error)
 func (s *Service) GetExpensesForUser(userID int64, userPermissions []string, params *ExpenseQueryParams) ([]*Expense, error) {
 	params.SetDefaults()
 
-	if CanViewAllExpenses(userPermissions) {
+	if s.permissionChecker.CanViewAllExpenses(userPermissions) {
 		s.logger.Info("GetExpensesForUser: user has management permissions, returning all expenses",
 			"user_id", userID, "permissions", userPermissions)
 		return s.GetAllExpenses(params)
@@ -160,7 +143,7 @@ func (s *Service) GetExpensesForUser(userID int64, userPermissions []string, par
 }
 
 func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []string) error {
-	if !HasManagerPermissions(userPermissions) {
+	if !s.permissionChecker.CanApproveExpenses(userPermissions) {
 		s.logger.Warn("approve expense denied: insufficient permissions",
 			"expense_id", expenseID,
 			"manager_id", managerID,
@@ -208,7 +191,7 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 }
 
 func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userPermissions []string) error {
-	if !HasManagerPermissions(userPermissions) {
+	if !s.permissionChecker.CanRejectExpenses(userPermissions) {
 		s.logger.Warn("reject expense denied: insufficient permissions",
 			"expense_id", expenseID,
 			"manager_id", managerID,
@@ -251,8 +234,8 @@ func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userP
 }
 
 func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error {
-	if !HasManagerPermissions(userPermissions) {
-		s.logger.Warn("user lacks manager permissions for payment retry", "expense_id", expenseID)
+	if !s.permissionChecker.CanRetryPayments(userPermissions) {
+		s.logger.Warn("user lacks permissions for payment retry", "expense_id", expenseID)
 		return ErrUnauthorizedAccess
 	}
 

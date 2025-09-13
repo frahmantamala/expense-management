@@ -2,10 +2,8 @@ package payment_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +12,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
-	"github.com/frahmantamala/expense-management/internal/auth"
+	"github.com/frahmantamala/expense-management/internal"
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
 	"github.com/frahmantamala/expense-management/internal/expense"
 	paymentpkg "github.com/frahmantamala/expense-management/internal/payment"
@@ -85,20 +83,20 @@ func (m *mockPaymentService) GetPaymentByExpenseID(expenseID int64) (*payment.Pa
 	return m.payment, nil
 }
 
-func createTestUser(id int64, permissions []string) *auth.User {
-	return &auth.User{
+func createTestUser(id int64, permissions []string) *internal.User {
+	return &internal.User{
 		ID:          id,
-		Email:       fmt.Sprintf("user%d@example.com", id),
+		Email:       "test@example.com",
 		Permissions: permissions,
 	}
 }
 
-func createRequestWithUser(method, target string, body []byte, user *auth.User) *http.Request {
+func createRequestWithUser(method, target string, body []byte, user *internal.User) *http.Request {
 	req := httptest.NewRequest(method, target, bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	// Add user to context
-	ctx := context.WithValue(req.Context(), auth.ContextUserKey, user)
+	ctx := internal.ContextWithUser(req.Context(), user)
 	return req.WithContext(ctx)
 }
 

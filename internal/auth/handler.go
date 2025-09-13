@@ -1,12 +1,12 @@
 package auth
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
 
+	"github.com/frahmantamala/expense-management/internal"
 	"github.com/frahmantamala/expense-management/internal/transport"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 )
@@ -145,7 +145,14 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 
 		h.Logger.Info("auth middleware: adding user to context", "user_id", uid, "email", claims.Email)
 
-		ctx := context.WithValue(r.Context(), ContextUserKey, coreUser)
+		// Convert auth.User to internal.User to avoid import cycles
+		internalUser := &internal.User{
+			ID:          coreUser.ID,
+			Email:       coreUser.Email,
+			Permissions: coreUser.Permissions,
+		}
+
+		ctx := internal.ContextWithUser(r.Context(), internalUser)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

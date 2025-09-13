@@ -125,7 +125,7 @@ func setupRoutes(deps *Dependencies) {
 		deps.Config.Security.AccessTokenDuration,
 		deps.Config.Security.RefreshTokenDuration,
 	)
-	authService := auth.NewService(authRepo, tokenGen, deps.Config.Security.BCryptCost)
+	authService := auth.NewService(authRepo, tokenGen, deps.Config.Security.BCryptCost, deps.Logger)
 	authHandler := auth.NewHandler(authService)
 	deps.AuthHandler = authHandler
 
@@ -158,7 +158,7 @@ func setupRoutes(deps *Dependencies) {
 	deps.PaymentHandler = paymentHandler
 
 	sqlDBForRoutes, _ := deps.DB.DB()
-	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, deps.UserHandler, deps.ExpenseHandler, categoryHandler, deps.PaymentHandler)
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, authService, deps.UserHandler, deps.ExpenseHandler, categoryHandler, deps.PaymentHandler)
 }
 
 func initializeDependencies() (*Dependencies, error) {

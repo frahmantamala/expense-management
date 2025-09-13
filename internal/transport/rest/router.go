@@ -14,8 +14,11 @@ import (
 	"github.com/go-chi/chi"
 )
 
-func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, userHandler *user.Handler, expenseHandler *expense.Handler, categoryHandler *category.Handler, paymentHandler *payment.Handler) {
+func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, authService *auth.Service, userHandler *user.Handler, expenseHandler *expense.Handler, categoryHandler *category.Handler, paymentHandler *payment.Handler) {
 	healthHandler := NewHealthHandler(db)
+
+	// Get RBAC authorization from auth service
+	rbac := authService.RBACAuthorization()
 
 	// Apply CORS middleware to all routes
 	router.Use(middleware.CORS)
@@ -67,9 +70,13 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 
 						// Manager routes with permission protection
 						er.Group(func(mr chi.Router) {
-							mr.Use(middleware.RequirePermissions("approve_expenses", "reject_expenses", "manager", "admin"))
+							mr.Use(rbac.RequireApproveExpense())
 							mr.Patch("/{id}/approve", expenseHandler.ApproveExpense) // PATCH /expenses/:id/approve
-							mr.Patch("/{id}/reject", expenseHandler.RejectExpense)   // PATCH /expenses/:id/reject
+						})
+
+						er.Group(func(mr chi.Router) {
+							mr.Use(rbac.RequireRejectExpense())
+							mr.Patch("/{id}/reject", expenseHandler.RejectExpense) // PATCH /expenses/:id/reject
 						})
 					})
 				}
@@ -77,7 +84,7 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, u
 				// Payment routes (requires retry_payments permission)
 				if paymentHandler != nil {
 					pr.Group(func(pmr chi.Router) {
-						pmr.Use(middleware.RequirePermissions("retry_payments", "admin"))
+						pmr.Use(rbac.RequireRetryPayment())
 						pmr.Post("/payment/retry", paymentHandler.RetryPayment) // POST /payment/retry
 					})
 				}

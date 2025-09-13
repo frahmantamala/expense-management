@@ -10,13 +10,6 @@ type ServiceAPI interface {
 	GetAllCategories() ([]CategoryResponse, error)
 	GetCategoryByName(name string) (*CategoryResponse, error)
 	IsValidCategory(name string) bool
-	GetAll() ([]*Category, error)
-	GetByID(id int64) (*Category, error)
-	Create(name, description string) (*Category, error)
-	Update(id int64, name, description string) (*Category, error)
-	Delete(id int64) error
-	Activate(id int64) (*Category, error)
-	Deactivate(id int64) (*Category, error)
 }
 
 type Handler struct {

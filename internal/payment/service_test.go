@@ -126,54 +126,6 @@ func (m *mockPaymentRepository) GetByExpenseID(expenseID int64) ([]*payment.Paym
 	return payments, nil
 }
 
-func (m *mockPaymentRepository) GetFailedPayments(limit int) ([]*payment.Payment, error) {
-	if m.getError != nil {
-		return nil, m.getError
-	}
-	var failedPayments []*payment.Payment
-	count := 0
-	for _, p := range m.payments {
-		if p.Status == "failed" && count < limit {
-			failedPayments = append(failedPayments, p)
-			count++
-		}
-	}
-	return failedPayments, nil
-}
-
-func (m *mockPaymentRepository) GetPaymentsByStatus(status string, offset, limit int) ([]*payment.Payment, error) {
-	if m.getError != nil {
-		return nil, m.getError
-	}
-	var payments []*payment.Payment
-	count := 0
-	skipped := 0
-	for _, p := range m.payments {
-		if p.Status == status {
-			if skipped < offset {
-				skipped++
-				continue
-			}
-			if count < limit {
-				payments = append(payments, p)
-				count++
-			}
-		}
-	}
-	return payments, nil
-}
-
-func (m *mockPaymentRepository) GetPaymentStats() (map[string]int64, error) {
-	if m.getError != nil {
-		return nil, m.getError
-	}
-	stats := make(map[string]int64)
-	for _, p := range m.payments {
-		stats[p.Status]++
-	}
-	return stats, nil
-}
-
 var _ = Describe("PaymentService", func() {
 	var (
 		paymentService *paymentPkg.PaymentService
