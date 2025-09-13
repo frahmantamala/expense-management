@@ -17,7 +17,7 @@ type ServiceAPI interface {
 	GetExpenseByID(expenseID int64, userID int64, userPermissions []string) (*Expense, error)
 	GetExpensesByUserID(userID int64, userPermissions []string) ([]*Expense, error)
 	GetUserExpenses(userID int64, limit, offset int) ([]*Expense, error)
-	GetExpensesForUser(userID int64, userPermissions []string, limit, offset int) ([]*Expense, error)
+	GetExpensesForUser(userID int64, userPermissions []string, params *ExpenseQueryParams) ([]*Expense, error)
 	UpdateExpenseStatus(expenseID int64, status string, userID int64, userPermissions []string) (*Expense, error)
 	SubmitExpenseForApproval(expenseID int64, userID int64, userPermissions []string) (*Expense, error)
 	ApproveExpense(expenseID int64, managerID int64, userPermissions []string) error
@@ -144,23 +144,46 @@ func (h *Handler) GetAllExpenses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 20
-	offset := 0
+	// Parse query parameters
+	params := &ExpenseQueryParams{}
 
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-			limit = l
+	// Per page (renamed from limit)
+	if perPageStr := r.URL.Query().Get("per_page"); perPageStr != "" {
+		if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 && pp <= 100 {
+			params.PerPage = pp
 		}
 	}
 
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
+	// Page (calculate from offset for backwards compatibility)
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			params.Page = p
+		}
+	} else if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		// Backwards compatibility: convert offset to page
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+			params.Page = (offset / params.PerPage) + 1
 		}
 	}
 
-	// Use the permission-aware service method
-	expenses, err := h.Service.GetExpensesForUser(user.ID, user.Permissions, limit, offset)
+	// Search
+	params.Search = r.URL.Query().Get("search")
+
+	// Category filter
+	params.CategoryID = r.URL.Query().Get("category_id")
+
+	// Status filter
+	params.Status = r.URL.Query().Get("status")
+
+	// Sort parameters
+	params.SortBy = r.URL.Query().Get("sort_by")
+	params.SortOrder = r.URL.Query().Get("sort_order")
+
+	// Set defaults
+	params.SetDefaults()
+
+	// Use the enhanced GetExpensesForUser method with query parameters
+	expenses, err := h.Service.GetExpensesForUser(user.ID, user.Permissions, params)
 	if err != nil {
 		h.Logger.Error("GetAllExpenses: service error", "error", err, "user_id", user.ID)
 		h.WriteError(w, http.StatusInternalServerError, "failed to retrieve expenses")
@@ -168,9 +191,14 @@ func (h *Handler) GetAllExpenses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"expenses": expenses,
-		"limit":    limit,
-		"offset":   offset,
+		"expenses":    expenses,
+		"per_page":    params.PerPage,
+		"page":        params.Page,
+		"search":      params.Search,
+		"category_id": params.CategoryID,
+		"status":      params.Status,
+		"sort_by":     params.SortBy,
+		"sort_order":  params.SortOrder,
 	})
 }
 

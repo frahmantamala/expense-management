@@ -63,7 +63,7 @@ func (m *mockExpenseRepository) GetByID(id int64) (*expenseDatamodel.Expense, er
 	return exp, nil
 }
 
-func (m *mockExpenseRepository) GetByUserID(userID int64, limit, offset int) ([]*expenseDatamodel.Expense, error) {
+func (m *mockExpenseRepository) GetByUserID(userID int64, params *expense.ExpenseQueryParams) ([]*expenseDatamodel.Expense, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
@@ -72,35 +72,113 @@ func (m *mockExpenseRepository) GetByUserID(userID int64, limit, offset int) ([]
 		return []*expenseDatamodel.Expense{}, nil
 	}
 
+	// Apply basic filtering for mock
+	filtered := []*expenseDatamodel.Expense{}
+	for _, exp := range expenses {
+		include := true
+
+		// Category filter
+		if params.CategoryID != "" && exp.Category != params.CategoryID {
+			include = false
+		}
+
+		// Status filter
+		if params.Status != "" && exp.ExpenseStatus != params.Status {
+			include = false
+		}
+
+		// Search filter (simple contains check)
+		if params.Search != "" {
+			if !contains(exp.Description, params.Search) && !contains(exp.Category, params.Search) {
+				include = false
+			}
+		}
+
+		if include {
+			filtered = append(filtered, exp)
+		}
+	}
+
 	// Simple pagination
-	start := offset
-	end := offset + limit
-	if start >= len(expenses) {
+	start := params.GetOffset()
+	end := start + params.PerPage
+	if start >= len(filtered) {
 		return []*expenseDatamodel.Expense{}, nil
 	}
-	if end > len(expenses) {
-		end = len(expenses)
+	if end > len(filtered) {
+		end = len(filtered)
 	}
 
-	return expenses[start:end], nil
+	return filtered[start:end], nil
 }
 
-func (m *mockExpenseRepository) GetAllExpenses(limit, offset int) ([]*expenseDatamodel.Expense, error) {
+func (m *mockExpenseRepository) GetAllExpenses(params *expense.ExpenseQueryParams) ([]*expenseDatamodel.Expense, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
 
-	// Simple pagination
-	start := offset
-	end := offset + limit
-	if start >= len(m.allExpenses) {
-		return []*expenseDatamodel.Expense{}, nil
-	}
-	if end > len(m.allExpenses) {
-		end = len(m.allExpenses)
+	// Apply basic filtering for mock
+	filtered := []*expenseDatamodel.Expense{}
+	for _, exp := range m.allExpenses {
+		include := true
+
+		// Category filter
+		if params.CategoryID != "" && exp.Category != params.CategoryID {
+			include = false
+		}
+
+		// Status filter
+		if params.Status != "" && exp.ExpenseStatus != params.Status {
+			include = false
+		}
+
+		// Search filter (simple contains check)
+		if params.Search != "" {
+			if !contains(exp.Description, params.Search) && !contains(exp.Category, params.Search) {
+				include = false
+			}
+		}
+
+		if include {
+			filtered = append(filtered, exp)
+		}
 	}
 
-	return m.allExpenses[start:end], nil
+	// Simple pagination
+	start := params.GetOffset()
+	end := start + params.PerPage
+	if start >= len(filtered) {
+		return []*expenseDatamodel.Expense{}, nil
+	}
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	return filtered[start:end], nil
+} // Helper function for simple string contains check
+func contains(str, substr string) bool {
+	return len(str) >= len(substr) && (str == substr ||
+		(len(substr) > 0 && len(str) > 0 &&
+			str[0:min(len(str), len(substr))] == substr ||
+			(len(str) > len(substr) &&
+				(str[len(str)-len(substr):] == substr ||
+					indexOfSubstring(str, substr) >= 0))))
+}
+
+func indexOfSubstring(str, substr string) int {
+	for i := 0; i <= len(str)-len(substr); i++ {
+		if str[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (m *mockExpenseRepository) Update(exp *expenseDatamodel.Expense) error {
@@ -523,7 +601,11 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.GetAllExpenses(10, 0)
+				params := &expense.ExpenseQueryParams{
+					PerPage: 10,
+					Page:    1,
+				}
+				result, err := expenseService.GetAllExpenses(params)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred())

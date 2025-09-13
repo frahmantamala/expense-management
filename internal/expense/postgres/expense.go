@@ -20,12 +20,6 @@ func (r *ExpenseRepository) Create(exp *expenseDatamodel.Expense) error {
 	return r.db.Create(exp).Error
 }
 
-func (r *ExpenseRepository) GetAllExpenses(limit, offset int) ([]*expenseDatamodel.Expense, error) {
-	var expenses []*expenseDatamodel.Expense
-	err := r.db.Order("submitted_at DESC").Limit(limit).Offset(offset).Find(&expenses).Error
-	return expenses, err
-}
-
 func (r *ExpenseRepository) GetByID(id int64) (*expenseDatamodel.Expense, error) {
 	var exp expenseDatamodel.Expense
 	err := r.db.Where("id = ?", id).First(&exp).Error
@@ -38,14 +32,75 @@ func (r *ExpenseRepository) GetByID(id int64) (*expenseDatamodel.Expense, error)
 	return &exp, nil
 }
 
-func (r *ExpenseRepository) GetByUserID(userID int64, limit, offset int) ([]*expenseDatamodel.Expense, error) {
+func (r *ExpenseRepository) GetByUserID(userID int64, params *expense.ExpenseQueryParams) ([]*expenseDatamodel.Expense, error) {
 	var expenses []*expenseDatamodel.Expense
-	err := r.db.Where("user_id = ?", userID).
-		Order("submitted_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&expenses).Error
+	query := r.db.Model(&expenseDatamodel.Expense{}).Where("user_id = ?", userID)
+
+	// Apply common query filters
+	query = r.applyQueryFilters(query, params)
+
+	err := query.Find(&expenses).Error
 	return expenses, err
+}
+
+func (r *ExpenseRepository) GetAllExpenses(params *expense.ExpenseQueryParams) ([]*expenseDatamodel.Expense, error) {
+	var expenses []*expenseDatamodel.Expense
+	query := r.db.Model(&expenseDatamodel.Expense{})
+
+	// Apply common query filters
+	query = r.applyQueryFilters(query, params)
+
+	err := query.Find(&expenses).Error
+	return expenses, err
+}
+
+// Helper method to apply common query filters
+func (r *ExpenseRepository) applyQueryFilters(query *gorm.DB, params *expense.ExpenseQueryParams) *gorm.DB {
+	// Search functionality
+	if params.Search != "" {
+		searchPattern := "%" + params.Search + "%"
+		query = query.Where("description ILIKE ? OR category ILIKE ?", searchPattern, searchPattern)
+	}
+
+	// Category filter
+	if params.CategoryID != "" {
+		query = query.Where("category = ?", params.CategoryID)
+	}
+
+	// Status filter
+	if params.Status != "" {
+		query = query.Where("expense_status = ?", params.Status)
+	}
+
+	// Sorting
+	orderClause := "created_at DESC" // Default fallback
+	switch params.SortBy {
+	case "createdAt":
+		orderClause = "created_at"
+		if params.SortOrder == "desc" {
+			orderClause += " DESC"
+		} else {
+			orderClause += " ASC"
+		}
+	case "submittedAt":
+		orderClause = "submitted_at"
+		if params.SortOrder == "desc" {
+			orderClause += " DESC"
+		} else {
+			orderClause += " ASC"
+		}
+	case "amount":
+		orderClause = "amount_idr"
+		if params.SortOrder == "desc" {
+			orderClause += " DESC"
+		} else {
+			orderClause += " ASC"
+		}
+	}
+
+	return query.Order(orderClause).
+		Limit(params.PerPage).
+		Offset(params.GetOffset())
 }
 
 func (r *ExpenseRepository) Update(exp *expenseDatamodel.Expense) error {

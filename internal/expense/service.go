@@ -11,8 +11,8 @@ import (
 type RepositoryAPI interface {
 	Create(expense *expenseDatamodel.Expense) error
 	GetByID(id int64) (*expenseDatamodel.Expense, error)
-	GetByUserID(userID int64, limit, offset int) ([]*expenseDatamodel.Expense, error)
-	GetAllExpenses(limit, offset int) ([]*expenseDatamodel.Expense, error)
+	GetByUserID(userID int64, params *ExpenseQueryParams) ([]*expenseDatamodel.Expense, error)
+	GetAllExpenses(params *ExpenseQueryParams) ([]*expenseDatamodel.Expense, error)
 	Update(expense *expenseDatamodel.Expense) error
 	UpdateStatus(id int64, status string, processedAt time.Time) error
 }
@@ -111,7 +111,14 @@ func (s *Service) SubmitExpenseForApproval(expenseID int64, userID int64, userPe
 }
 
 func (s *Service) GetUserExpenses(userID int64, limit, offset int) ([]*Expense, error) {
-	expensesData, err := s.repo.GetByUserID(userID, limit, offset)
+	// Convert limit/offset to ExpenseQueryParams for backward compatibility
+	params := &ExpenseQueryParams{
+		PerPage: limit,
+		Page:    (offset / limit) + 1,
+	}
+	params.SetDefaults()
+
+	expensesData, err := s.repo.GetByUserID(userID, params)
 	if err != nil {
 		s.logger.Error("failed to get user expenses", "error", err, "user_id", userID)
 		return nil, err
@@ -120,8 +127,10 @@ func (s *Service) GetUserExpenses(userID int64, limit, offset int) ([]*Expense, 
 	return FromDataModelSlice(expensesData), nil
 }
 
-func (s *Service) GetAllExpenses(limit, offset int) ([]*Expense, error) {
-	expensesData, err := s.repo.GetAllExpenses(limit, offset)
+func (s *Service) GetAllExpenses(params *ExpenseQueryParams) ([]*Expense, error) {
+	params.SetDefaults()
+
+	expensesData, err := s.repo.GetAllExpenses(params)
 	if err != nil {
 		s.logger.Error("failed to get all expenses", "error", err)
 		return nil, err
@@ -130,15 +139,23 @@ func (s *Service) GetAllExpenses(limit, offset int) ([]*Expense, error) {
 	return FromDataModelSlice(expensesData), nil
 }
 
-func (s *Service) GetExpensesForUser(userID int64, userPermissions []string, limit, offset int) ([]*Expense, error) {
+func (s *Service) GetExpensesForUser(userID int64, userPermissions []string, params *ExpenseQueryParams) ([]*Expense, error) {
+	params.SetDefaults()
+
 	if CanViewAllExpenses(userPermissions) {
 		s.logger.Info("GetExpensesForUser: user has management permissions, returning all expenses",
 			"user_id", userID, "permissions", userPermissions)
-		return s.GetAllExpenses(limit, offset)
+		return s.GetAllExpenses(params)
 	} else {
 		s.logger.Info("GetExpensesForUser: regular user, returning only user's expenses",
 			"user_id", userID, "permissions", userPermissions)
-		return s.GetUserExpenses(userID, limit, offset)
+
+		expensesData, err := s.repo.GetByUserID(userID, params)
+		if err != nil {
+			s.logger.Error("failed to get user expenses with query", "error", err, "user_id", userID)
+			return nil, err
+		}
+		return FromDataModelSlice(expensesData), nil
 	}
 }
 

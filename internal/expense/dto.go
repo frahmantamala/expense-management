@@ -71,6 +71,35 @@ func (dto RejectExpenseDTO) Validate() error {
 	return nil
 }
 
+type ExpenseQueryParams struct {
+	PerPage    int    `json:"per_page"`
+	Page       int    `json:"page"`
+	Search     string `json:"search"`
+	CategoryID string `json:"category_id"`
+	Status     string `json:"status"`
+	SortBy     string `json:"sort_by"`
+	SortOrder  string `json:"sort_order"`
+}
+
+func (q *ExpenseQueryParams) SetDefaults() {
+	if q.PerPage <= 0 || q.PerPage > 100 {
+		q.PerPage = 20
+	}
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.SortBy == "" {
+		q.SortBy = "created_at"
+	}
+	if q.SortOrder == "" {
+		q.SortOrder = "desc"
+	}
+}
+
+func (q *ExpenseQueryParams) GetOffset() int {
+	return (q.Page - 1) * q.PerPage
+}
+
 var (
 	ErrExpenseNotFound      = errors.ErrExpenseNotFound
 	ErrUnauthorizedAccess   = errors.ErrUnauthorizedAccess

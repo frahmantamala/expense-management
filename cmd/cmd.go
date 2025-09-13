@@ -28,9 +28,7 @@ func Execute() {
 }
 
 func loadConfig(path string) (*internal.Config, error) {
-	// Check if we're running in Docker environment
 	if os.Getenv("APP_ENV") == "production" || os.Getenv("DOCKER_ENV") == "true" {
-		// Load configuration from environment variables (Docker deployment)
 		cfg := internal.LoadConfigFromEnv()
 		if err := cfg.Validate(); err != nil {
 			return nil, fmt.Errorf("error validating config from environment: %w", err)
@@ -38,7 +36,6 @@ func loadConfig(path string) (*internal.Config, error) {
 		return cfg, nil
 	}
 
-	// Load configuration from file (development)
 	v := viper.New()
 	v.AddConfigPath(path)
 	v.SetConfigName("config")
