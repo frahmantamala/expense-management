@@ -22,25 +22,43 @@ const (
 
 // Defines values for ExpenseExpenseStatus.
 const (
-	Approved        ExpenseExpenseStatus = "approved"
-	PendingApproval ExpenseExpenseStatus = "pending_approval"
-	Rejected        ExpenseExpenseStatus = "rejected"
+	ExpenseExpenseStatusApproved        ExpenseExpenseStatus = "approved"
+	ExpenseExpenseStatusPendingApproval ExpenseExpenseStatus = "pending_approval"
+	ExpenseExpenseStatusRejected        ExpenseExpenseStatus = "rejected"
 )
 
 // Defines values for ExpenseCreateCategory.
 const (
-	Akomodasi  ExpenseCreateCategory = "akomodasi"
-	BahanBakar ExpenseCreateCategory = "bahan_bakar"
 	Kantor     ExpenseCreateCategory = "kantor"
-	Kesehatan  ExpenseCreateCategory = "kesehatan"
-	Komunikasi ExpenseCreateCategory = "komunikasi"
 	LainLain   ExpenseCreateCategory = "lain_lain"
 	Liburan    ExpenseCreateCategory = "liburan"
 	Makan      ExpenseCreateCategory = "makan"
-	Pelatihan  ExpenseCreateCategory = "pelatihan"
-	Pemasaran  ExpenseCreateCategory = "pemasaran"
 	Perjalanan ExpenseCreateCategory = "perjalanan"
-	Software   ExpenseCreateCategory = "software"
+)
+
+// Defines values for GetAllExpensesParamsStatus.
+const (
+	GetAllExpensesParamsStatusApproved        GetAllExpensesParamsStatus = "approved"
+	GetAllExpensesParamsStatusPendingApproval GetAllExpensesParamsStatus = "pending_approval"
+	GetAllExpensesParamsStatusRejected        GetAllExpensesParamsStatus = "rejected"
+)
+
+// Defines values for GetAllExpensesParamsSortBy.
+const (
+	Amount       GetAllExpensesParamsSortBy = "amount"
+	CreatedAt    GetAllExpensesParamsSortBy = "created_at"
+	CreatedAt1   GetAllExpensesParamsSortBy = "createdAt"
+	ExpenseDate  GetAllExpensesParamsSortBy = "expense_date"
+	SubmittedAt  GetAllExpensesParamsSortBy = "submitted_at"
+	SubmittedAt1 GetAllExpensesParamsSortBy = "submittedAt"
+	UpdatedAt    GetAllExpensesParamsSortBy = "updated_at"
+	UpdatedAt1   GetAllExpensesParamsSortBy = "updatedAt"
+)
+
+// Defines values for GetAllExpensesParamsSortOrder.
+const (
+	Asc  GetAllExpensesParamsSortOrder = "asc"
+	Desc GetAllExpensesParamsSortOrder = "desc"
 )
 
 // ApprovalRequest defines model for ApprovalRequest.
@@ -199,14 +217,38 @@ type AuthRefreshJSONBody struct {
 	RefreshToken *string `json:"refresh_token,omitempty"`
 }
 
-// GetUserExpensesParams defines parameters for GetUserExpenses.
-type GetUserExpensesParams struct {
-	// Limit Maximum number of expenses to return
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+// GetAllExpensesParams defines parameters for GetAllExpenses.
+type GetAllExpensesParams struct {
+	// PerPage Number of expenses to return per page
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 
-	// Offset Number of expenses to skip for pagination
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// Page Page number for pagination (1-based)
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// Search Search term to filter expenses by description or category
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// CategoryId Filter expenses by category
+	CategoryId *string `form:"category_id,omitempty" json:"category_id,omitempty"`
+
+	// Status Filter expenses by status
+	Status *GetAllExpensesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// SortBy Field to sort by
+	SortBy *GetAllExpensesParamsSortBy `form:"sort_by,omitempty" json:"sort_by,omitempty"`
+
+	// SortOrder Sort order
+	SortOrder *GetAllExpensesParamsSortOrder `form:"sort_order,omitempty" json:"sort_order,omitempty"`
 }
+
+// GetAllExpensesParamsStatus defines parameters for GetAllExpenses.
+type GetAllExpensesParamsStatus string
+
+// GetAllExpensesParamsSortBy defines parameters for GetAllExpenses.
+type GetAllExpensesParamsSortBy string
+
+// GetAllExpensesParamsSortOrder defines parameters for GetAllExpenses.
+type GetAllExpensesParamsSortOrder string
 
 // RejectExpenseJSONBody defines parameters for RejectExpense.
 type RejectExpenseJSONBody struct {
@@ -234,42 +276,52 @@ type RetryPaymentJSONRequestBody = PaymentRetryRequest
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"H4sIAAAAAAAC/+xaaW/bOtb+K4Te90OLUWLJSbr4W7pOBr0zRdriAlMEBi0eW2wkUiWppJki/33ARRIl",
+	"U16apO0FBggCSyJ5nnN4dvJ7lPGy4gyYktHseySzHEpsfp5WleBXuDiHrzVIpV9VglcgFAUzgHFlf6ib",
+	"CqJZJJWgbBXd3sbNG774ApmKbuPotFb56EJQYloEFoqjCkt5zQUJUxHwtaYCSDT77NbwZlyMopAVZxLW",
+	"YeAsAynnil8CC6IRsBQg89ERIcZfYgUrLm7WyRGQmaCVopytPbbTkP86juAbLqtCU/gDcCERZgQBUyAU",
+	"pqwEpqJ4HTbDJWygQAkwRZcURI9AiS8xW18uyGOjQh8UVrVcZzXLIbsEMsdm8zsa02R6cpA8P0iTj9Oj",
+	"2cnJLJ0eps9Onp88/VvydJYkURwtuSj1tIhgBQeKlhBikdQCa77mpexRSNqxlClYgdCDZYuyQ5IDLlR+",
+	"sxu/r4XgYlyPMk7A0w6PcglS4hXsqDqvv1UQVtSS10zNKRHr23pqviHK0BkjnIGkmKHzuqI497f3JEmS",
+	"oHAyT1/7Kzs4qB2xg7bEUSYAq3br+yv+mQNDKgckIOOCoGsskRvfW7xVk/Rj+nx2/HR2/PzwyZPn++rI",
+	"JntrmBs1N80f0sJcIQJshRm6LCgEWQa71lyjWaf0CitA1w3nbiziWVYLMc53kszM3793ZrdB0Wn7wP41",
+	"PaaQ/Y740sejYbC61I61AkYoW82xCwdRHNmfBqwAra1g3G0H3BuwhouSdSyfGP1ad8I4e+WLIQ2paSW4",
+	"dtbbFKtZUWtWOwU9avBNGviP765vrC4KvNDzlaghDkWPDGil5ktaQNgl/0vQFWW4QM2QZlfc1B7IZrmi",
+	"Zlk+15APK7LcB0gtisBWnL8bUDVo0FLwEsE3BUIDlIoL7ch8QLlSlZxNJk9OkmyZLbLjp3h5tCTT6fLJ",
+	"s/RZhg9Lnl3iih5SPlEg1eQqneil5aQBlE6PHA+thGtBd2FJ1ouSKrWPOrRTHsDV1BXZy+kVWCrkJj0E",
+	"HAliHrK7s1d6r/VndJ3zxvcOHUGDZrpuiBvC1kuz2L0FL/SopIyWdYnSJE6SBJ29Oo9Rib+ZdyfmXfP+",
+	"cSDSuZHu2b6yC0az9H6CYeswxRdcYGbiYRMXLzFTXCdYBaZsrv/p33RRC8z6vnM0kj5U/Crxt3fAVio3",
+	"sjFiaZ7T3za63d2ZokfGpWmnhCSIKxBIuJTu8W/naHcG++uc8KAe88y8r7qeVQ2UKVSx/d3k5Rty7Yeu",
+	"LPrlMSaEai5w8b4H4/8FLKNZ9H+TbvjEldKTYXUU8pl3Lkne4xUQ5wQCBRhVUPZ/bELcFB4dISwEvrEF",
+	"+WqktqlAzMe/Kq5wEfoUZuZG17LnoMTNeNPAqU4orn3M/WQSYSl5Rk1ou6YqNzZXWRrhzNka34alnXW6",
+	"RTQNxZHQeKNthuGvHvtcXGyVxJgReGVlH2wzBTUj4lCLxZAIMvtPuPZ5pEska9MkWdbFbnr5SYIItT4q",
+	"LJSRf6jPMt4PoiSsXlTOcabola99C84LwMzvgKwzD6KkUlLO+sb3OcowcyUPGJfF5rZWaB8wmTc50kXc",
+	"2dUaib4FrctIWz9ktaDq5oO2PyuhF4AFiNNaR+Hv0cI8vWkc1j/+/BjFtlVnGDVfu/3QMSC61QtTtuQG",
+	"FFXGpTRZwh+Y4RWYbT19fxbF0RUIabc8PUwOE42bV8BwRaNZdHSYHB6Z1prKDbgJrlU+KfiKmkyk4tY+",
+	"9Q6bLswZ0blcrfJ3ZojVf5DqBSc3tkHClNt7XFUFzcysyRdpMxvrhrY5Kb+jeNs3Mh2fzAur/QbzNEnu",
+	"mbSzRkO7bzamPyjt1tZliXUCaSwBWZnpD60Mea22ClGPWePneN1eC75aAUF6uK9X0exzX6M+X9xe+Ngc",
+	"iQ6X63RuBnbuBv34/va9wv7t1d9r2xlco+DWO0HZj1bKLgdynK8gIOK3oF52o+7I1yBr6lHfKSdo+9i7",
+	"uLQ10byjUulsF/plkwbQF9VbUAgXxdjACXgpjpPaMOQpQeGqjf8SLbkwEV8rNjClZQTEFb06G9DMCsiB",
+	"SXoFOgdXoPUtRpILZX5gRlCFdTWhiSBuaMlDpE1a2kXKzqN6MQVd06JAEsDnScboOteZvoBVXWBhoEgz",
+	"irPiRmOlAvFr1k44jOJ13Tgtijbf075Z4BIUCGmMfRDG63IBwpO/dOlKLZiGiyqbG2h3Hn2twWQxNmZ2",
+	"aV3saROBJa4LFc2mfmWd9ovqULdgiEynrYhZeHqfPCk/Sg8WWNrWXBDYKKh0XxQfAIssRwpEqQVjVaCT",
+	"1aJ3CoO4CLfATX04AlYaCj24a85tiOrNOoyNrfcQ3WaCTTbvRtzVKCN93iDXzYyO8P5d5R2gQkH0vml7",
+	"RYu+cLzjhxGMXKi5mRTQpP70BnvvpXs41b97XUjv0Xz0eoLtg/lgK+XxYnic8w+aYS7I4OROD9rEbTMj",
+	"xLCb27CKzZN5GQB08UNByQE1MxZY0mzeWb0JWm0weKG/ej5BJ6q4qMELYUazZ1EnPe3/Lpo6NfXL0jSJ",
+	"Gzs0E5qdH+yyJ6JWHE15HpkgZP2DHs/IXA8H0sf9xg3wTdYEETtYv243fYShxqi3cjUd5aolsQdHixvv",
+	"vGjIkMHtjLTzBnfYkek97EjrNWzCqxeb64g8qlTO2ZuofQfVmvZU68RjpIkDP6hft/G2tO0mWKu35/ku",
+	"fBnTG7RcR3vLflo1aMnrJK+XOpRYZTllK5NUOWKZoDprwlF8bx2m8Gll1SUM288IvY7U1oTIZkNA/Hyo",
+	"O/kI3yNwO74pnaglEJPZtHllMGdYP9BqlCcc7dplXY46HvPCKzv9Gw8oQfVx2rq+5MgRs214blLI8YPi",
+	"XaqK1s96CTqQdk81tOO9QxJlV7igpNWcznOc2S9WB6238L2GufVxbHLgph9nlBmVtVRoAWhl9kUXI5ih",
+	"JLINGkfMU9UAQfd1V6LN8IbwAtQ1AEOpEVSa9GkbhVhqtQpTd6qI7JBtxGlw1sCtbXQNvcs1gV1/gQly",
+	"DQd0gBp6JtFBXhlkNj+9t+J/K6xPTBeYXND/APFwcYFMNaj9pS3/4+jkHpsSW3GdseYoyZ4bgZ6wZ3tI",
+	"V++tpzSRs3Vng+LY+N1gx8ieB79uj5UfoifYP3reqT2U3jfx0B40l5r2kvoHUz60B/G99sfkOyW3mzpH",
+	"nZwHnQFTFVRY5V1RQEk0lFOgVuzq54sH7LFtECK0R9wK00LuJ8y3sEmSk6bTr1Mund4EGp52xIPL9QEa",
+	"5YN7vLfOLu6tmxg6vLxbYO+S+l0j+P3HFkv76OfRfsPFghICDB24dqJA9koyapXIYDr+eZiaAyPGFVry",
+	"mu3pwpzRbLI8d6o2bnjnZsBvanfDAwzcTyhN+JX1ckkzqqsXwrO6BKZsh1PLhpIRG/GPjN26Fz/h/GO7",
+	"Zbe9uR+y7Hb2/yz7L23Z1ir7hm0vrIxmJfYqT/SAycPgslCAa345OG+yU5C5RmS5cPcdJvY2x+gBqLmS",
+	"8b69RPIQgTt0DeYnH3kG758E5OrG2Ssw/iWRX27mv9ak/nq1ntnq9tLPkguEWd/MzXHlxF6oGT24tu06",
+	"c/vnAdXTrB+QQy1B7F8fZK7HWLerWjHaRMNc4owmuKKTqzS6vbj9bwAAAP//k2YbADs3AAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
