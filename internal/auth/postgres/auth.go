@@ -12,7 +12,7 @@ type Repository struct {
 	db *gorm.DB
 }
 
-func NewRepository(db *gorm.DB) *Repository {
+func NewRepository(db *gorm.DB) auth.RepositoryAPI {
 	return &Repository{
 		db: db,
 	}

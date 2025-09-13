@@ -8,17 +8,29 @@ import (
 
 	"github.com/frahmantamala/expense-management/internal/auth"
 	"github.com/frahmantamala/expense-management/internal/transport"
-	"github.com/frahmantamala/expense-management/internal/transport/middleware"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 	"github.com/go-chi/chi"
 )
 
-type Handler struct {
-	*transport.BaseHandler
-	Service *Service
+type ServiceAPI interface {
+	CreateExpense(req *CreateExpenseDTO, userID int64) (*Expense, error)
+	GetExpenseByID(expenseID int64, userID int64, userPermissions []string) (*Expense, error)
+	GetExpensesByUserID(userID int64, userPermissions []string) ([]*Expense, error)
+	GetUserExpenses(userID int64, limit, offset int) ([]*Expense, error)
+	GetExpensesForUser(userID int64, userPermissions []string, limit, offset int) ([]*Expense, error)
+	UpdateExpenseStatus(expenseID int64, status string, userID int64, userPermissions []string) (*Expense, error)
+	SubmitExpenseForApproval(expenseID int64, userID int64, userPermissions []string) (*Expense, error)
+	ApproveExpense(expenseID int64, managerID int64, userPermissions []string) error
+	RejectExpense(expenseID int64, managerID int64, reason string, userPermissions []string) error
+	RetryPayment(expenseID int64, userPermissions []string) error
 }
 
-func NewHandler(service *Service) *Handler {
+type Handler struct {
+	*transport.BaseHandler
+	Service ServiceAPI
+}
+
+func NewHandler(service ServiceAPI) *Handler {
 	lg := logger.LoggerWrapper()
 	if lg == nil {
 		lg = slog.Default()
@@ -44,7 +56,7 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expense, err := h.Service.CreateExpense(user.ID, dto)
+	expense, err := h.Service.CreateExpense(&dto, user.ID)
 	if err != nil {
 		h.Logger.Error("CreateExpense: service error", "error", err, "user_id", user.ID)
 		h.HandleServiceError(w, err)
@@ -76,9 +88,7 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isManager := middleware.HasManagerPermissions(user)
-
-	expense, err := h.Service.GetExpenseByID(expenseID, user.ID, isManager)
+	expense, err := h.Service.GetExpenseByID(expenseID, user.ID, user.Permissions)
 	if err != nil {
 		h.Logger.Error("GetExpense: service error", "error", err, "expense_id", expenseID, "user_id", user.ID)
 		h.HandleServiceError(w, err)
@@ -149,16 +159,11 @@ func (h *Handler) GetAllExpenses(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	expenses, err := h.Service.GetAllExpenses(limit, offset, user.Permissions)
+	// Use the permission-aware service method
+	expenses, err := h.Service.GetExpensesForUser(user.ID, user.Permissions, limit, offset)
 	if err != nil {
 		h.Logger.Error("GetAllExpenses: service error", "error", err, "user_id", user.ID)
-
-		switch err {
-		case ErrUnauthorizedAccess:
-			h.WriteError(w, http.StatusForbidden, "manager access required")
-		default:
-			h.WriteError(w, http.StatusInternalServerError, "failed to get all expenses")
-		}
+		h.WriteError(w, http.StatusInternalServerError, "failed to retrieve expenses")
 		return
 	}
 

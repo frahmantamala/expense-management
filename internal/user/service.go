@@ -2,34 +2,41 @@ package user
 
 import (
 	"fmt"
+
+	userDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/user"
 )
 
-type Service struct {
-	repo Repository
-}
-
-type Repository interface {
-	GetByID(userID int64) (*User, error)
+type RepositoryAPI interface {
+	GetByID(userID int64) (*userDatamodel.User, error)
 	GetPermissions(userID int64) ([]string, error)
 }
 
-func NewService(repo Repository) *Service {
+type Service struct {
+	repo RepositoryAPI
+}
+
+func NewService(repo RepositoryAPI) *Service {
 	return &Service{
 		repo: repo,
 	}
 }
 
 func (s *Service) GetByID(userID int64) (*User, error) {
-	u, err := s.repo.GetByID(userID)
+	dataUser, err := s.repo.GetByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user by id: %w", err)
+		return nil, fmt.Errorf("failed to get user by ID: %w", err)
 	}
 
-	perms, err := s.repo.GetPermissions(userID)
+	// Get permissions separately
+	permissions, err := s.repo.GetPermissions(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user permissions: %w", err)
 	}
-	u.Permissions = perms
 
-	return u, nil
+	// Convert datamodel to domain entity with permissions
+	return FromDataModelWithPermissions(dataUser, permissions), nil
+}
+
+func (s *Service) GetPermissions(userID int64) ([]string, error) {
+	return s.repo.GetPermissions(userID)
 }

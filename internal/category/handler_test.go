@@ -9,6 +9,7 @@ import (
 
 	"github.com/frahmantamala/expense-management/internal/category"
 	categoryPostgres "github.com/frahmantamala/expense-management/internal/category/postgres"
+	categoryDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/category"
 	"github.com/frahmantamala/expense-management/internal/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,7 +21,7 @@ import (
 var _ = Describe("Category Handler Integration", func() {
 	var (
 		db      *gorm.DB
-		repo    category.Repository
+		repo    category.RepositoryAPI
 		service *category.Service
 		handler *category.Handler
 		slogger *slog.Logger
@@ -49,11 +50,11 @@ var _ = Describe("Category Handler Integration", func() {
 		}
 
 		for _, cat := range testCategories {
-			err := repo.Create(cat)
+			err := repo.Create(category.ToDataModel(cat))
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		inactiveCategory := &category.Category{
+		inactiveCategory := &categoryDatamodel.ExpenseCategory{
 			Name:        "inactive",
 			Description: "Inactive category",
 			IsActive:    true,

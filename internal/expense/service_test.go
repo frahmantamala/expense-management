@@ -9,33 +9,31 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	expenseDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/expense"
 	"github.com/frahmantamala/expense-management/internal/expense"
 )
 
 // Mock repository for testing
 type mockExpenseRepository struct {
-	expenses          map[int64]*expense.Expense
-	expensesByUser    map[int64][]*expense.Expense
-	allExpenses       []*expense.Expense
-	pendingApprovals  []*expense.Expense
-	createError       error
-	getError          error
-	updateError       error
-	updateStatusError error
-	nextID            int64
+	expenses       map[int64]*expenseDatamodel.Expense
+	expensesByUser map[int64][]*expenseDatamodel.Expense
+	allExpenses    []*expenseDatamodel.Expense
+	createError    error
+	getError       error
+	updateError    error
+	nextID         int64
 }
 
 func newMockExpenseRepository() *mockExpenseRepository {
 	return &mockExpenseRepository{
-		expenses:         make(map[int64]*expense.Expense),
-		expensesByUser:   make(map[int64][]*expense.Expense),
-		allExpenses:      make([]*expense.Expense, 0),
-		pendingApprovals: make([]*expense.Expense, 0),
-		nextID:           1,
+		expenses:       make(map[int64]*expenseDatamodel.Expense),
+		expensesByUser: make(map[int64][]*expenseDatamodel.Expense),
+		allExpenses:    make([]*expenseDatamodel.Expense, 0),
+		nextID:         1,
 	}
 }
 
-func (m *mockExpenseRepository) Create(exp *expense.Expense) error {
+func (m *mockExpenseRepository) Create(exp *expenseDatamodel.Expense) error {
 	if m.createError != nil {
 		return m.createError
 	}
@@ -51,15 +49,10 @@ func (m *mockExpenseRepository) Create(exp *expense.Expense) error {
 	// Add to all expenses
 	m.allExpenses = append(m.allExpenses, exp)
 
-	// Add to pending approvals if applicable
-	if exp.ExpenseStatus == expense.ExpenseStatusPendingApproval {
-		m.pendingApprovals = append(m.pendingApprovals, exp)
-	}
-
 	return nil
 }
 
-func (m *mockExpenseRepository) GetByID(id int64) (*expense.Expense, error) {
+func (m *mockExpenseRepository) GetByID(id int64) (*expenseDatamodel.Expense, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
@@ -70,20 +63,20 @@ func (m *mockExpenseRepository) GetByID(id int64) (*expense.Expense, error) {
 	return exp, nil
 }
 
-func (m *mockExpenseRepository) GetByUserID(userID int64, limit, offset int) ([]*expense.Expense, error) {
+func (m *mockExpenseRepository) GetByUserID(userID int64, limit, offset int) ([]*expenseDatamodel.Expense, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
 	expenses := m.expensesByUser[userID]
 	if expenses == nil {
-		return []*expense.Expense{}, nil
+		return []*expenseDatamodel.Expense{}, nil
 	}
 
 	// Simple pagination
 	start := offset
 	end := offset + limit
 	if start >= len(expenses) {
-		return []*expense.Expense{}, nil
+		return []*expenseDatamodel.Expense{}, nil
 	}
 	if end > len(expenses) {
 		end = len(expenses)
@@ -92,25 +85,7 @@ func (m *mockExpenseRepository) GetByUserID(userID int64, limit, offset int) ([]
 	return expenses[start:end], nil
 }
 
-func (m *mockExpenseRepository) GetPendingApprovals(limit, offset int) ([]*expense.Expense, error) {
-	if m.getError != nil {
-		return nil, m.getError
-	}
-
-	// Simple pagination
-	start := offset
-	end := offset + limit
-	if start >= len(m.pendingApprovals) {
-		return []*expense.Expense{}, nil
-	}
-	if end > len(m.pendingApprovals) {
-		end = len(m.pendingApprovals)
-	}
-
-	return m.pendingApprovals[start:end], nil
-}
-
-func (m *mockExpenseRepository) GetAllExpenses(limit, offset int) ([]*expense.Expense, error) {
+func (m *mockExpenseRepository) GetAllExpenses(limit, offset int) ([]*expenseDatamodel.Expense, error) {
 	if m.getError != nil {
 		return nil, m.getError
 	}
@@ -119,7 +94,7 @@ func (m *mockExpenseRepository) GetAllExpenses(limit, offset int) ([]*expense.Ex
 	start := offset
 	end := offset + limit
 	if start >= len(m.allExpenses) {
-		return []*expense.Expense{}, nil
+		return []*expenseDatamodel.Expense{}, nil
 	}
 	if end > len(m.allExpenses) {
 		end = len(m.allExpenses)
@@ -128,7 +103,7 @@ func (m *mockExpenseRepository) GetAllExpenses(limit, offset int) ([]*expense.Ex
 	return m.allExpenses[start:end], nil
 }
 
-func (m *mockExpenseRepository) Update(exp *expense.Expense) error {
+func (m *mockExpenseRepository) Update(exp *expenseDatamodel.Expense) error {
 	if m.updateError != nil {
 		return m.updateError
 	}
@@ -137,10 +112,8 @@ func (m *mockExpenseRepository) Update(exp *expense.Expense) error {
 	return nil
 }
 
+// Legacy method for backward compatibility - should not be used in new code
 func (m *mockExpenseRepository) UpdateStatus(id int64, status string, processedAt time.Time) error {
-	if m.updateStatusError != nil {
-		return m.updateStatusError
-	}
 	if exp, exists := m.expenses[id]; exists {
 		exp.ExpenseStatus = status
 		exp.ProcessedAt = &processedAt
@@ -211,7 +184,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred())
@@ -235,7 +208,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred())
@@ -256,7 +229,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred())
@@ -278,7 +251,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).To(HaveOccurred())
@@ -297,7 +270,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).To(HaveOccurred())
@@ -316,7 +289,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).To(HaveOccurred())
@@ -335,7 +308,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).To(HaveOccurred())
@@ -357,7 +330,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).To(HaveOccurred())
@@ -379,7 +352,7 @@ var _ = Describe("ExpenseService", func() {
 				}
 
 				// When
-				result, err := expenseService.CreateExpense(userID, dto)
+				result, err := expenseService.CreateExpense(&dto, userID)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred()) // Expense creation should succeed
@@ -403,7 +376,7 @@ var _ = Describe("ExpenseService", func() {
 					CreatedAt:     time.Now(),
 					UpdatedAt:     time.Now(),
 				}
-				mockRepo.expenses[1] = testExpense
+				mockRepo.expenses[1] = expense.ToDataModel(testExpense)
 				managerID := int64(456)
 				permissions := []string{"approve_expenses"} // Use correct permission string
 
@@ -446,7 +419,7 @@ var _ = Describe("ExpenseService", func() {
 					CreatedAt:     time.Now(),
 					UpdatedAt:     time.Now(),
 				}
-				mockRepo.expenses[1] = testExpense
+				mockRepo.expenses[1] = expense.ToDataModel(testExpense)
 				managerID := int64(456)
 				permissions := []string{"approve_expenses"} // Use correct permission string
 
@@ -472,7 +445,7 @@ var _ = Describe("ExpenseService", func() {
 					CreatedAt:     time.Now(),
 					UpdatedAt:     time.Now(),
 				}
-				mockRepo.expenses[1] = testExpense
+				mockRepo.expenses[1] = expense.ToDataModel(testExpense)
 				managerID := int64(456)
 				reason := "Insufficient documentation"
 				permissions := []string{"reject_expenses"} // Use correct permission string
@@ -497,7 +470,10 @@ var _ = Describe("ExpenseService", func() {
 				userID := int64(123)
 				testExpense1 := &expense.Expense{ID: 1, UserID: userID, AmountIDR: 25000}
 				testExpense2 := &expense.Expense{ID: 2, UserID: userID, AmountIDR: 50000}
-				mockRepo.expensesByUser[userID] = []*expense.Expense{testExpense1, testExpense2}
+				mockRepo.expensesByUser[userID] = []*expenseDatamodel.Expense{
+					expense.ToDataModel(testExpense1),
+					expense.ToDataModel(testExpense2),
+				}
 
 				// When
 				result, err := expenseService.GetUserExpenses(userID, 10, 0)
@@ -541,11 +517,13 @@ var _ = Describe("ExpenseService", func() {
 					AmountIDR:     100000,
 					ExpenseStatus: expense.ExpenseStatusApproved,
 				}
-				mockRepo.allExpenses = []*expense.Expense{expense1, expense2}
-				permissions := []string{"approve_expenses"} // Use correct permission string
+				mockRepo.allExpenses = []*expenseDatamodel.Expense{
+					expense.ToDataModel(expense1),
+					expense.ToDataModel(expense2),
+				}
 
 				// When
-				result, err := expenseService.GetAllExpenses(10, 0, permissions)
+				result, err := expenseService.GetAllExpenses(10, 0)
 
 				// Then
 				Expect(err).ToNot(HaveOccurred())
@@ -569,7 +547,7 @@ var _ = Describe("ExpenseService", func() {
 					CreatedAt:     time.Now(),
 					UpdatedAt:     time.Now(),
 				}
-				mockRepo.expenses[123] = testExpense
+				mockRepo.expenses[123] = expense.ToDataModel(testExpense)
 				permissions := []string{"approve_expenses"} // Use correct permission string
 
 				// When

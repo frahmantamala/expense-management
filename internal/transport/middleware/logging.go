@@ -16,6 +16,7 @@ import (
 var sensitiveFields = []string{
 	"password",
 	"password_hash",
+	"passwordhash",
 	"token",
 	"access_token",
 	"refresh_token",

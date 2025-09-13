@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"strings"
 
+	userDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/user"
 	"github.com/frahmantamala/expense-management/internal/user"
 	"gorm.io/gorm"
 )
@@ -12,12 +13,12 @@ type Repository struct {
 	db *gorm.DB
 }
 
-func NewRepository(db *gorm.DB) *Repository {
+func NewRepository(db *gorm.DB) user.RepositoryAPI {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetByID(userID int64) (*user.User, error) {
-	var u user.User
+func (r *Repository) GetByID(userID int64) (*userDatamodel.User, error) {
+	var u userDatamodel.User
 	var department sql.NullString
 
 	query := `SELECT id, email, name, department, is_active, password_hash, created_at, updated_at

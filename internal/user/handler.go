@@ -9,12 +9,17 @@ import (
 	"github.com/frahmantamala/expense-management/pkg/logger"
 )
 
-type Handler struct {
-	*transport.BaseHandler
-	Service *Service
+type ServiceAPI interface {
+	GetByID(userID int64) (*User, error)
+	GetPermissions(userID int64) ([]string, error)
 }
 
-func NewHandler(svc *Service) *Handler {
+type Handler struct {
+	*transport.BaseHandler
+	Service ServiceAPI
+}
+
+func NewHandler(svc ServiceAPI) *Handler {
 	lg := logger.LoggerWrapper()
 	if lg == nil {
 		lg = slog.Default()
@@ -47,7 +52,7 @@ func (h *Handler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	h.Logger.Info("GetCurrentUser: service returned user", "user_id", u.ID, "email", u.Email, "name", u.Name)
 
-	h.Logger.Info("GetCurrentUser: sending response", "response", u)
+	h.Logger.Info("GetCurrentUser: sending response", "user_id", u.ID, "email", u.Email, "name", u.Name)
 
 	h.WriteJSON(w, http.StatusOK, u)
 }

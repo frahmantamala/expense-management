@@ -1,27 +1,34 @@
 package payment
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
 )
 
-// PaymentView represents API-ready view model for payment
-type PaymentView struct {
-	ID            int64      `json:"id"`
-	ExpenseID     int64      `json:"expense_id"`
-	ExternalID    string     `json:"external_id"`
-	AmountIDR     int64      `json:"amount_idr"`
-	Status        string     `json:"status"`
-	PaymentMethod *string    `json:"payment_method,omitempty"`
-	FailureReason *string    `json:"failure_reason,omitempty"`
-	RetryCount    int        `json:"retry_count"`
-	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+type ServiceAPI interface {
+	CreatePayment(expenseID int64, externalID string, amountIDR int64) (*payment.Payment, error)
+	ProcessPayment(req *PaymentRequest) (*PaymentResponse, error)
+	RetryPayment(req *PaymentRequest) (*PaymentResponse, error)
+	GetPaymentByExpenseID(expenseID int64) (*payment.Payment, error)
 }
 
-// PaymentSummaryView represents simplified view for listing
+type PaymentView struct {
+	ID              int64           `json:"id"`
+	ExpenseID       int64           `json:"expense_id"`
+	ExternalID      string          `json:"external_id"`
+	AmountIDR       int64           `json:"amount_idr"`
+	Status          string          `json:"status"`
+	PaymentMethod   *string         `json:"payment_method,omitempty"`
+	GatewayResponse json.RawMessage `json:"gateway_response,omitempty"`
+	FailureReason   *string         `json:"failure_reason,omitempty"`
+	RetryCount      int             `json:"retry_count"`
+	ProcessedAt     *time.Time      `json:"processed_at,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
 type PaymentSummaryView struct {
 	ID         int64     `json:"id"`
 	ExternalID string    `json:"external_id"`
@@ -31,24 +38,88 @@ type PaymentSummaryView struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// ToView converts payment domain model to API view model
-func ToView(p *payment.Payment) *PaymentView {
-	return &PaymentView{
-		ID:            p.ID,
-		ExpenseID:     p.ExpenseID,
-		ExternalID:    p.ExternalID,
-		AmountIDR:     p.AmountIDR,
-		Status:        p.Status,
-		PaymentMethod: p.PaymentMethod,
-		FailureReason: p.FailureReason,
-		RetryCount:    p.RetryCount,
-		ProcessedAt:   p.ProcessedAt,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
+const (
+	StatusPending = "pending"
+	StatusSuccess = "success"
+	StatusFailed  = "failed"
+)
+
+func NewPayment(expenseID int64, externalID string, amountIDR int64) *payment.Payment {
+	now := time.Now()
+	return &payment.Payment{
+		ExpenseID:  expenseID,
+		ExternalID: externalID,
+		AmountIDR:  amountIDR,
+		Status:     StatusPending,
+		RetryCount: 0,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 }
 
-// ToSummaryView converts to summary view
+func MarkAsSuccess(p *payment.Payment, paymentMethod *string, gatewayResponse json.RawMessage) {
+	p.Status = StatusSuccess
+	p.PaymentMethod = paymentMethod
+	p.GatewayResponse = gatewayResponse
+	now := time.Now()
+	p.ProcessedAt = &now
+	p.UpdatedAt = now
+}
+
+func MarkAsFailed(p *payment.Payment, failureReason string, gatewayResponse json.RawMessage) {
+	p.Status = StatusFailed
+	p.FailureReason = &failureReason
+	p.GatewayResponse = gatewayResponse
+	now := time.Now()
+	p.ProcessedAt = &now
+	p.UpdatedAt = now
+}
+
+func IncrementRetryCount(p *payment.Payment) {
+	p.RetryCount++
+	p.UpdatedAt = time.Now()
+}
+
+func CanRetry(p *payment.Payment) bool {
+	return p.Status == StatusFailed && p.RetryCount < 3
+}
+
+func IsCompleted(p *payment.Payment) bool {
+	return p.Status == StatusSuccess || p.Status == StatusFailed
+}
+
+func IsPending(p *payment.Payment) bool {
+	return p.Status == StatusPending
+}
+
+func MapExternalStatus(externalStatus string) string {
+	switch externalStatus {
+	case "success", "completed", "paid":
+		return StatusSuccess
+	case "failed", "cancelled", "declined":
+		return StatusFailed
+	default:
+		return StatusPending
+	}
+}
+
+func ToView(p *payment.Payment) *PaymentView {
+	return &PaymentView{
+		ID:              p.ID,
+		ExpenseID:       p.ExpenseID,
+		ExternalID:      p.ExternalID,
+		AmountIDR:       p.AmountIDR,
+		Status:          p.Status,
+		PaymentMethod:   p.PaymentMethod,
+		GatewayResponse: p.GatewayResponse,
+		FailureReason:   p.FailureReason,
+		RetryCount:      p.RetryCount,
+		ProcessedAt:     p.ProcessedAt,
+		CreatedAt:       p.CreatedAt,
+		UpdatedAt:       p.UpdatedAt,
+	}
+}
+
 func ToSummaryView(p *payment.Payment) *PaymentSummaryView {
 	return &PaymentSummaryView{
 		ID:         p.ID,

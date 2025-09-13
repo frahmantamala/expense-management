@@ -13,10 +13,10 @@ import (
 
 type Handler struct {
 	*transport.BaseHandler
-	Service AuthService
+	Service ServiceAPI
 }
 
-func NewHandler(svc AuthService) *Handler {
+func NewHandler(svc ServiceAPI) *Handler {
 	lg := logger.LoggerWrapper()
 	if lg == nil {
 		lg = slog.Default()

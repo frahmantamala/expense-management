@@ -6,6 +6,7 @@ import (
 
 	"github.com/frahmantamala/expense-management/internal/category"
 	categoryPostgres "github.com/frahmantamala/expense-management/internal/category/postgres"
+	categoryDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/category"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gorm.io/driver/sqlite"
@@ -18,10 +19,24 @@ func TestCategoryPostgres(t *testing.T) {
 	RunSpecs(t, "Category Postgres Suite")
 }
 
+// SQLiteCategory is a SQLite-compatible model for testing
+type SQLiteCategory struct {
+	ID          int64     `gorm:"primaryKey"`
+	Name        string    `gorm:"column:name;uniqueIndex;not null"`
+	Description string    `gorm:"column:description"`
+	IsActive    bool      `gorm:"column:is_active;default:true"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at"`
+}
+
+func (SQLiteCategory) TableName() string {
+	return "categories"
+}
+
 var _ = Describe("Category PostgreSQL Repository", func() {
 	var (
 		db   *gorm.DB
-		repo category.Repository
+		repo category.RepositoryAPI
 	)
 
 	BeforeEach(func() {
@@ -32,8 +47,8 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create the table
-		err = db.AutoMigrate(&category.Category{})
+		// Create the table using SQLite-compatible model
+		err = db.AutoMigrate(&SQLiteCategory{})
 		Expect(err).NotTo(HaveOccurred())
 
 		repo = categoryPostgres.NewCategoryRepository(db)
@@ -41,7 +56,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 
 	Describe("Create", func() {
 		It("should create a new category successfully", func() {
-			cat := &category.Category{
+			cat := &categoryDatamodel.ExpenseCategory{
 				Name:        "makan",
 				Description: "Meals and entertainment",
 				IsActive:    true,
@@ -54,7 +69,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 		})
 
 		It("should fail to create duplicate category", func() {
-			cat1 := &category.Category{
+			cat1 := &categoryDatamodel.ExpenseCategory{
 				Name:        "makan",
 				Description: "Meals and entertainment",
 				IsActive:    true,
@@ -63,7 +78,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			err := repo.Create(cat1)
 			Expect(err).NotTo(HaveOccurred())
 
-			cat2 := &category.Category{
+			cat2 := &categoryDatamodel.ExpenseCategory{
 				Name:        "makan",
 				Description: "Duplicate category",
 				IsActive:    true,
@@ -76,7 +91,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 
 	Describe("GetAll", func() {
 		BeforeEach(func() {
-			activeCategories := []*category.Category{
+			activeCategories := []*categoryDatamodel.ExpenseCategory{
 				{
 					Name:        "makan",
 					Description: "Meals and entertainment",
@@ -95,7 +110,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			}
 
 			// Create inactive category separately and update it
-			inactiveCategory := &category.Category{
+			inactiveCategory := &categoryDatamodel.ExpenseCategory{
 				Name:        "kantor",
 				Description: "Office supplies",
 				IsActive:    true, // Create as active first
@@ -140,10 +155,10 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 	})
 
 	Describe("GetByName", func() {
-		var testCategory *category.Category
+		var testCategory *categoryDatamodel.ExpenseCategory
 
 		BeforeEach(func() {
-			testCategory = &category.Category{
+			testCategory = &categoryDatamodel.ExpenseCategory{
 				Name:        "makan",
 				Description: "Meals and entertainment",
 				IsActive:    true,
@@ -175,10 +190,10 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 	})
 
 	Describe("Update", func() {
-		var testCategory *category.Category
+		var testCategory *categoryDatamodel.ExpenseCategory
 
 		BeforeEach(func() {
-			testCategory = &category.Category{
+			testCategory = &categoryDatamodel.ExpenseCategory{
 				Name:        "makan",
 				Description: "Meals and entertainment",
 				IsActive:    true,
@@ -216,10 +231,10 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 	})
 
 	Describe("Delete", func() {
-		var testCategory *category.Category
+		var testCategory *categoryDatamodel.ExpenseCategory
 
 		BeforeEach(func() {
-			testCategory = &category.Category{
+			testCategory = &categoryDatamodel.ExpenseCategory{
 				Name:        "makan",
 				Description: "Meals and entertainment",
 				IsActive:    true,
@@ -252,7 +267,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 
 	Describe("Database constraints", func() {
 		It("should enforce unique constraint on name", func() {
-			cat1 := &category.Category{
+			cat1 := &categoryDatamodel.ExpenseCategory{
 				Name:        "duplicate",
 				Description: "First category",
 				IsActive:    true,
@@ -260,7 +275,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			err := repo.Create(cat1)
 			Expect(err).NotTo(HaveOccurred())
 
-			cat2 := &category.Category{
+			cat2 := &categoryDatamodel.ExpenseCategory{
 				Name:        "duplicate",
 				Description: "Second category",
 				IsActive:    true,
@@ -270,7 +285,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 		})
 
 		It("should set default values correctly", func() {
-			cat := &category.Category{
+			cat := &categoryDatamodel.ExpenseCategory{
 				Name:        "test",
 				Description: "Test category",
 				// IsActive not set, should default to true

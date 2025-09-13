@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
+	paymentpkg "github.com/frahmantamala/expense-management/internal/payment"
 	"gorm.io/gorm"
 )
 
@@ -12,7 +13,7 @@ type PaymentRepository struct {
 	db *gorm.DB
 }
 
-func NewPaymentRepository(db *gorm.DB) *PaymentRepository {
+func NewPaymentRepository(db *gorm.DB) paymentpkg.RepositoryAPI {
 	return &PaymentRepository{
 		db: db,
 	}
@@ -82,7 +83,7 @@ func (r *PaymentRepository) IncrementRetryCount(id int64) error {
 
 func (r *PaymentRepository) GetFailedPayments(limit int) ([]*payment.Payment, error) {
 	var payments []*payment.Payment
-	err := r.db.Where("status = ? AND retry_count < ?", payment.StatusFailed, 3).
+	err := r.db.Where("status = ? AND retry_count < ?", paymentpkg.StatusFailed, 3).
 		Order("created_at ASC").
 		Limit(limit).
 		Find(&payments).Error

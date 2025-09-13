@@ -19,6 +19,7 @@ import (
 	expensePostgres "github.com/frahmantamala/expense-management/internal/expense/postgres"
 	"github.com/frahmantamala/expense-management/internal/payment"
 	paymentPostgres "github.com/frahmantamala/expense-management/internal/payment/postgres"
+	"github.com/frahmantamala/expense-management/internal/transport"
 	"github.com/frahmantamala/expense-management/internal/transport/rest"
 	user "github.com/frahmantamala/expense-management/internal/user"
 	userpostgres "github.com/frahmantamala/expense-management/internal/user/postgres"
@@ -116,30 +117,28 @@ func setupRoutes(deps *Dependencies) {
 	deps.Router.Use(loggingMiddleware.LoggingMiddleware(deps.Logger))
 	deps.Router.Use(middleware.Recoverer)
 
+	// Initialize auth repository and service following ServiceAPI pattern
 	authRepo := authPostgres.NewRepository(deps.DB)
-
 	tokenGen := auth.NewJWTTokenGenerator(
 		deps.Config.Security.SessionSecret,
 		deps.Config.Security.SessionSecret,
 		deps.Config.Security.AccessTokenDuration,
 		deps.Config.Security.RefreshTokenDuration,
 	)
-
 	authService := auth.NewService(authRepo, tokenGen, deps.Config.Security.BCryptCost)
 	authHandler := auth.NewHandler(authService)
-
 	deps.AuthHandler = authHandler
 
-	// user repo/service/handler
+	// Initialize user repository and service following ServiceAPI pattern
 	userRepo := userpostgres.NewRepository(deps.DB)
 	userSvc := user.NewService(userRepo)
 	userHandler := user.NewHandler(userSvc)
 	deps.UserHandler = userHandler
 
-	// expense repo/service/handler
+	// Initialize expense repository and service following ServiceAPI pattern
 	expenseRepo := expensePostgres.NewExpenseRepository(deps.DB)
 
-	// payment repository and service
+	// Initialize payment repository and service following ServiceAPI pattern
 	paymentRepo := paymentPostgres.NewPaymentRepository(deps.DB)
 	paymentService := payment.NewPaymentService(deps.Config.Payment.MockAPIURL, deps.Logger, paymentRepo)
 	paymentProcessor := payment.NewExpensePaymentProcessor(paymentService, deps.Logger)
@@ -148,13 +147,14 @@ func setupRoutes(deps *Dependencies) {
 	expenseHandler := expense.NewHandler(expenseService)
 	deps.ExpenseHandler = expenseHandler
 
-	// Category repository and service
+	// Initialize category repository and service following ServiceAPI pattern
 	categoryRepo := categoryPostgres.NewCategoryRepository(deps.DB)
 	categoryService := category.NewService(categoryRepo, deps.Logger)
-	categoryHandler := category.NewHandler(expenseHandler.BaseHandler, categoryService)
+	baseHandler := transport.NewBaseHandler(deps.Logger)
+	categoryHandler := category.NewHandler(baseHandler, categoryService)
 
-	// Payment handler
-	paymentHandler := payment.NewHandler(expenseService, deps.Logger)
+	// Initialize payment handler
+	paymentHandler := payment.NewHandler(expenseService, paymentService, deps.Logger)
 	deps.PaymentHandler = paymentHandler
 
 	sqlDBForRoutes, _ := deps.DB.DB()

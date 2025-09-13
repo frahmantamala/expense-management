@@ -4,44 +4,46 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"testing"
 
 	"github.com/frahmantamala/expense-management/internal/category"
+	categoryDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/category"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-//func TestCategoryServiceOnly(t *testing.T) {
-//	RegisterFailHandler(Fail)
-//	RunSpecs(t, "Category Service Suite")
-//}
+func TestCategoryService(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Category Service Suite")
+}
 
 // MockRepository implements category.Repository for testing
 type MockRepository struct {
-	categories map[string]*category.Category
+	categories map[string]*categoryDatamodel.ExpenseCategory
 	shouldFail bool
 	failError  error
 }
 
 func NewMockRepository() *MockRepository {
 	return &MockRepository{
-		categories: make(map[string]*category.Category),
+		categories: make(map[string]*categoryDatamodel.ExpenseCategory),
 		shouldFail: false,
 	}
 }
 
-func (m *MockRepository) GetAll() ([]*category.Category, error) {
+func (m *MockRepository) GetAll() ([]*categoryDatamodel.ExpenseCategory, error) {
 	if m.shouldFail {
 		return nil, m.failError
 	}
 
-	var result []*category.Category
+	var result []*categoryDatamodel.ExpenseCategory
 	for _, cat := range m.categories {
 		result = append(result, cat)
 	}
 	return result, nil
 }
 
-func (m *MockRepository) GetByName(name string) (*category.Category, error) {
+func (m *MockRepository) GetByName(name string) (*categoryDatamodel.ExpenseCategory, error) {
 	if m.shouldFail {
 		return nil, m.failError
 	}
@@ -53,7 +55,7 @@ func (m *MockRepository) GetByName(name string) (*category.Category, error) {
 	return cat, nil
 }
 
-func (m *MockRepository) Create(cat *category.Category) error {
+func (m *MockRepository) Create(cat *categoryDatamodel.ExpenseCategory) error {
 	if m.shouldFail {
 		return m.failError
 	}
@@ -61,12 +63,24 @@ func (m *MockRepository) Create(cat *category.Category) error {
 	return nil
 }
 
-func (m *MockRepository) Update(cat *category.Category) error {
+func (m *MockRepository) Update(cat *categoryDatamodel.ExpenseCategory) error {
 	if m.shouldFail {
 		return m.failError
 	}
 	m.categories[cat.Name] = cat
 	return nil
+}
+
+func (m *MockRepository) GetByID(id int64) (*categoryDatamodel.ExpenseCategory, error) {
+	if m.shouldFail {
+		return nil, m.failError
+	}
+	for _, cat := range m.categories {
+		if cat.ID == id {
+			return cat, nil
+		}
+	}
+	return nil, nil
 }
 
 func (m *MockRepository) Delete(id int64) error {
@@ -90,7 +104,8 @@ func (m *MockRepository) SetShouldFail(shouldFail bool, err error) {
 }
 
 func (m *MockRepository) AddCategory(cat *category.Category) {
-	m.categories[cat.Name] = cat
+	dataCategory := category.ToDataModel(cat)
+	m.categories[dataCategory.Name] = dataCategory
 }
 
 var _ = Describe("Category Service", func() {

@@ -11,19 +11,21 @@ import (
 	"github.com/frahmantamala/expense-management/internal/transport"
 )
 
-type ExpenseService interface {
+type ExpenseServiceAPI interface {
 	RetryPayment(expenseID int64, userPermissions []string) error
 }
 
 type Handler struct {
 	transport.BaseHandler
-	ExpenseService ExpenseService
+	ExpenseService ExpenseServiceAPI
+	PaymentService ServiceAPI
 	Logger         *slog.Logger
 }
 
-func NewHandler(expenseService ExpenseService, logger *slog.Logger) *Handler {
+func NewHandler(expenseService ExpenseServiceAPI, paymentService ServiceAPI, logger *slog.Logger) *Handler {
 	return &Handler{
 		ExpenseService: expenseService,
+		PaymentService: paymentService,
 		Logger:         logger,
 	}
 }

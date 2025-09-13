@@ -15,8 +15,9 @@ import (
 	"github.com/onsi/gomega"
 
 	"github.com/frahmantamala/expense-management/internal/auth"
+	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
 	"github.com/frahmantamala/expense-management/internal/expense"
-	"github.com/frahmantamala/expense-management/internal/payment"
+	paymentpkg "github.com/frahmantamala/expense-management/internal/payment"
 	"github.com/frahmantamala/expense-management/internal/transport"
 )
 
@@ -46,6 +47,44 @@ func (m *mockExpenseService) RetryPayment(expenseID int64, userPermissions []str
 	return nil
 }
 
+// Mock PaymentService for testing
+type mockPaymentService struct {
+	createPaymentError       error
+	processPaymentError      error
+	retryPaymentError        error
+	getPaymentByExpenseError error
+	payment                  *payment.Payment
+	response                 *paymentpkg.PaymentResponse
+}
+
+func (m *mockPaymentService) CreatePayment(expenseID int64, externalID string, amountIDR int64) (*payment.Payment, error) {
+	if m.createPaymentError != nil {
+		return nil, m.createPaymentError
+	}
+	return m.payment, nil
+}
+
+func (m *mockPaymentService) ProcessPayment(req *paymentpkg.PaymentRequest) (*paymentpkg.PaymentResponse, error) {
+	if m.processPaymentError != nil {
+		return nil, m.processPaymentError
+	}
+	return m.response, nil
+}
+
+func (m *mockPaymentService) RetryPayment(req *paymentpkg.PaymentRequest) (*paymentpkg.PaymentResponse, error) {
+	if m.retryPaymentError != nil {
+		return nil, m.retryPaymentError
+	}
+	return m.response, nil
+}
+
+func (m *mockPaymentService) GetPaymentByExpenseID(expenseID int64) (*payment.Payment, error) {
+	if m.getPaymentByExpenseError != nil {
+		return nil, m.getPaymentByExpenseError
+	}
+	return m.payment, nil
+}
+
 func createTestUser(id int64, permissions []string) *auth.User {
 	return &auth.User{
 		ID:          id,
@@ -65,16 +104,18 @@ func createRequestWithUser(method, target string, body []byte, user *auth.User) 
 
 var _ = ginkgo.Describe("PaymentHandler", func() {
 	var (
-		handler        *payment.Handler
+		handler        *paymentpkg.Handler
 		expenseService *mockExpenseService
+		paymentService *mockPaymentService
 		recorder       *httptest.ResponseRecorder
 		logger         *slog.Logger
 	)
 
 	ginkgo.BeforeEach(func() {
 		expenseService = &mockExpenseService{}
+		paymentService = &mockPaymentService{}
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-		handler = payment.NewHandler(expenseService, logger)
+		handler = paymentpkg.NewHandler(expenseService, paymentService, logger)
 		handler.BaseHandler = *transport.NewBaseHandler(logger)
 		recorder = httptest.NewRecorder()
 	})

@@ -1,28 +1,21 @@
 package auth
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
 
-type UserRepository interface {
-	GetPasswordForUsername(username string) (passwordHash string, userID string, err error)
-	GetUserWithPermissions(userID int64) (*User, error)
-}
-
+// Service implements the ServiceAPI
 type Service struct {
-	userRepo       UserRepository
-	tokenGenerator TokenGenerator
+	userRepo       RepositoryAPI
+	tokenGenerator TokenGeneratorAPI
 	bcryptCost     int
 }
 
-func NewService(userRepo UserRepository, tokenGen TokenGenerator, bcryptCost int) *Service {
+func NewService(userRepo RepositoryAPI, tokenGen TokenGeneratorAPI, bcryptCost int) *Service {
 	return &Service{
 		userRepo:       userRepo,
 		tokenGenerator: tokenGen,
@@ -50,7 +43,7 @@ func (s *Service) Authenticate(dto LoginDTO) (AuthTokens, error) {
 	}
 
 	// Verify password
-	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(dto.Password)); err != nil {
+	if err := VerifyPassword(storedHash, dto.Password); err != nil {
 		return AuthTokens{}, ErrInvalidCredentials
 	}
 
@@ -177,17 +170,5 @@ func (j *JWTTokenGenerator) ValidateToken(tokenString string) (*Claims, error) {
 }
 
 func (s *Service) HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hash), nil
-}
-
-func GenerateRandomToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
+	return HashPassword(password, s.bcryptCost)
 }

@@ -6,12 +6,25 @@ import (
 	"github.com/frahmantamala/expense-management/internal/transport"
 )
 
-type Handler struct {
-	*transport.BaseHandler
-	Service *Service
+type ServiceAPI interface {
+	GetAllCategories() ([]CategoryResponse, error)
+	GetCategoryByName(name string) (*CategoryResponse, error)
+	IsValidCategory(name string) bool
+	GetAll() ([]*Category, error)
+	GetByID(id int64) (*Category, error)
+	Create(name, description string) (*Category, error)
+	Update(id int64, name, description string) (*Category, error)
+	Delete(id int64) error
+	Activate(id int64) (*Category, error)
+	Deactivate(id int64) (*Category, error)
 }
 
-func NewHandler(baseHandler *transport.BaseHandler, service *Service) *Handler {
+type Handler struct {
+	*transport.BaseHandler
+	Service ServiceAPI
+}
+
+func NewHandler(baseHandler *transport.BaseHandler, service ServiceAPI) *Handler {
 	return &Handler{
 		BaseHandler: baseHandler,
 		Service:     service,

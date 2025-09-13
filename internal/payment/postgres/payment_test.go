@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
+	paymentpkg "github.com/frahmantamala/expense-management/internal/payment"
 )
 
 func TestPaymentRepository(t *testing.T) {
@@ -55,7 +56,7 @@ func (p *PaymentSQLite) BeforeUpdate(tx *gorm.DB) error {
 var _ = ginkgo.Describe("PaymentRepository", func() {
 	var (
 		db   *gorm.DB
-		repo *PaymentRepository
+		repo paymentpkg.RepositoryAPI
 	)
 
 	ginkgo.BeforeEach(func() {
@@ -83,7 +84,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  123,
 					ExternalID: "ext-123",
 					AmountIDR:  50000,
-					Status:     payment.StatusPending,
+					Status:     paymentpkg.StatusPending,
 					RetryCount: 0,
 				}
 
@@ -104,14 +105,14 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  123,
 					ExternalID: "ext-123",
 					AmountIDR:  50000,
-					Status:     payment.StatusPending,
+					Status:     paymentpkg.StatusPending,
 				}
 
 				secondPayment := &payment.Payment{
 					ExpenseID:  456,
 					ExternalID: "ext-123", // Same external ID
 					AmountIDR:  75000,
-					Status:     payment.StatusPending,
+					Status:     paymentpkg.StatusPending,
 				}
 
 				// When
@@ -132,7 +133,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				ExpenseID:     123,
 				ExternalID:    "ext-123",
 				AmountIDR:     50000,
-				Status:        payment.StatusSuccess,
+				Status:        paymentpkg.StatusSuccess,
 				PaymentMethod: func() *string { s := "bank_transfer"; return &s }(),
 				RetryCount:    0,
 			}
@@ -151,7 +152,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				gomega.Expect(result.ExpenseID).To(gomega.Equal(int64(123)))
 				gomega.Expect(result.ExternalID).To(gomega.Equal("ext-123"))
 				gomega.Expect(result.AmountIDR).To(gomega.Equal(int64(50000)))
-				gomega.Expect(result.Status).To(gomega.Equal(payment.StatusSuccess))
+				gomega.Expect(result.Status).To(gomega.Equal(paymentpkg.StatusSuccess))
 				gomega.Expect(*result.PaymentMethod).To(gomega.Equal("bank_transfer"))
 			})
 		})
@@ -176,14 +177,14 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  123,
 					ExternalID: "ext-123-1",
 					AmountIDR:  50000,
-					Status:     payment.StatusFailed,
+					Status:     paymentpkg.StatusFailed,
 					CreatedAt:  time.Now().Add(-2 * time.Hour),
 				},
 				{
 					ExpenseID:  123,
 					ExternalID: "ext-123-2",
 					AmountIDR:  50000,
-					Status:     payment.StatusSuccess,
+					Status:     paymentpkg.StatusSuccess,
 					CreatedAt:  time.Now().Add(-1 * time.Hour),
 				},
 			}
@@ -203,7 +204,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 				gomega.Expect(result).ToNot(gomega.BeNil())
 				gomega.Expect(result.ExternalID).To(gomega.Equal("ext-123-2"))
-				gomega.Expect(result.Status).To(gomega.Equal(payment.StatusSuccess))
+				gomega.Expect(result.Status).To(gomega.Equal(paymentpkg.StatusSuccess))
 			})
 		})
 
@@ -227,7 +228,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				ExpenseID:  123,
 				ExternalID: "ext-123",
 				AmountIDR:  50000,
-				Status:     payment.StatusPending,
+				Status:     paymentpkg.StatusPending,
 				RetryCount: 0,
 			}
 			err := repo.Create(testPayment)
@@ -242,7 +243,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				failureReason := "Network timeout"
 
 				// When
-				err := repo.UpdateStatus(testPayment.ID, payment.StatusSuccess, &paymentMethod, gatewayResponse, &failureReason)
+				err := repo.UpdateStatus(testPayment.ID, paymentpkg.StatusSuccess, &paymentMethod, gatewayResponse, &failureReason)
 
 				// Then
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -250,7 +251,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				// Verify the update
 				updated, err := repo.GetByID(testPayment.ID)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
-				gomega.Expect(updated.Status).To(gomega.Equal(payment.StatusSuccess))
+				gomega.Expect(updated.Status).To(gomega.Equal(paymentpkg.StatusSuccess))
 				gomega.Expect(*updated.PaymentMethod).To(gomega.Equal("bank_transfer"))
 				gomega.Expect(*updated.FailureReason).To(gomega.Equal("Network timeout"))
 				gomega.Expect(updated.ProcessedAt).ToNot(gomega.BeNil())
@@ -258,7 +259,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 
 			ginkgo.It("should update status with nil optional fields", func() {
 				// When
-				err := repo.UpdateStatus(testPayment.ID, payment.StatusFailed, nil, nil, nil)
+				err := repo.UpdateStatus(testPayment.ID, paymentpkg.StatusFailed, nil, nil, nil)
 
 				// Then
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -266,14 +267,14 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				// Verify the update
 				updated, err := repo.GetByID(testPayment.ID)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
-				gomega.Expect(updated.Status).To(gomega.Equal(payment.StatusFailed))
+				gomega.Expect(updated.Status).To(gomega.Equal(paymentpkg.StatusFailed))
 			})
 		})
 
 		ginkgo.Context("when payment not found", func() {
 			ginkgo.It("should succeed but not affect any rows", func() {
 				// When
-				err := repo.UpdateStatus(999, payment.StatusSuccess, nil, nil, nil)
+				err := repo.UpdateStatus(999, paymentpkg.StatusSuccess, nil, nil, nil)
 
 				// Then
 				gomega.Expect(err).ToNot(gomega.HaveOccurred()) // GORM doesn't return error for 0 affected rows
@@ -289,7 +290,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				ExpenseID:  123,
 				ExternalID: "ext-123",
 				AmountIDR:  50000,
-				Status:     payment.StatusFailed,
+				Status:     paymentpkg.StatusFailed,
 				RetryCount: 2,
 			}
 			err := repo.Create(testPayment)
@@ -330,21 +331,21 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  123,
 					ExternalID: "ext-123-1",
 					AmountIDR:  50000,
-					Status:     payment.StatusFailed,
+					Status:     paymentpkg.StatusFailed,
 					CreatedAt:  time.Now().Add(-2 * time.Hour),
 				},
 				{
 					ExpenseID:  123,
 					ExternalID: "ext-123-2",
 					AmountIDR:  50000,
-					Status:     payment.StatusSuccess,
+					Status:     paymentpkg.StatusSuccess,
 					CreatedAt:  time.Now().Add(-1 * time.Hour),
 				},
 				{
 					ExpenseID:  456, // Different expense
 					ExternalID: "ext-456",
 					AmountIDR:  75000,
-					Status:     payment.StatusPending,
+					Status:     paymentpkg.StatusPending,
 				},
 			}
 
@@ -387,7 +388,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  123,
 					ExternalID: "ext-failed-1",
 					AmountIDR:  50000,
-					Status:     payment.StatusFailed,
+					Status:     paymentpkg.StatusFailed,
 					RetryCount: 1,
 					CreatedAt:  time.Now().Add(-3 * time.Hour),
 				},
@@ -395,7 +396,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  456,
 					ExternalID: "ext-failed-2",
 					AmountIDR:  75000,
-					Status:     payment.StatusFailed,
+					Status:     paymentpkg.StatusFailed,
 					RetryCount: 2,
 					CreatedAt:  time.Now().Add(-2 * time.Hour),
 				},
@@ -403,7 +404,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  789,
 					ExternalID: "ext-failed-3",
 					AmountIDR:  100000,
-					Status:     payment.StatusFailed,
+					Status:     paymentpkg.StatusFailed,
 					RetryCount: 3, // Should be excluded (retry_count >= 3)
 					CreatedAt:  time.Now().Add(-1 * time.Hour),
 				},
@@ -411,7 +412,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 					ExpenseID:  101112,
 					ExternalID: "ext-success",
 					AmountIDR:  25000,
-					Status:     payment.StatusSuccess,
+					Status:     paymentpkg.StatusSuccess,
 					RetryCount: 0,
 				},
 			}
@@ -450,11 +451,11 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 		ginkgo.BeforeEach(func() {
 			// Create test payments with different statuses
 			payments := []*payment.Payment{
-				{ExpenseID: 1, ExternalID: "ext-success-1", AmountIDR: 50000, Status: payment.StatusSuccess, CreatedAt: time.Now().Add(-3 * time.Hour)},
-				{ExpenseID: 2, ExternalID: "ext-success-2", AmountIDR: 75000, Status: payment.StatusSuccess, CreatedAt: time.Now().Add(-2 * time.Hour)},
-				{ExpenseID: 3, ExternalID: "ext-success-3", AmountIDR: 100000, Status: payment.StatusSuccess, CreatedAt: time.Now().Add(-1 * time.Hour)},
-				{ExpenseID: 4, ExternalID: "ext-pending", AmountIDR: 25000, Status: payment.StatusPending},
-				{ExpenseID: 5, ExternalID: "ext-failed", AmountIDR: 30000, Status: payment.StatusFailed},
+				{ExpenseID: 1, ExternalID: "ext-success-1", AmountIDR: 50000, Status: paymentpkg.StatusSuccess, CreatedAt: time.Now().Add(-3 * time.Hour)},
+				{ExpenseID: 2, ExternalID: "ext-success-2", AmountIDR: 75000, Status: paymentpkg.StatusSuccess, CreatedAt: time.Now().Add(-2 * time.Hour)},
+				{ExpenseID: 3, ExternalID: "ext-success-3", AmountIDR: 100000, Status: paymentpkg.StatusSuccess, CreatedAt: time.Now().Add(-1 * time.Hour)},
+				{ExpenseID: 4, ExternalID: "ext-pending", AmountIDR: 25000, Status: paymentpkg.StatusPending},
+				{ExpenseID: 5, ExternalID: "ext-failed", AmountIDR: 30000, Status: paymentpkg.StatusFailed},
 			}
 
 			for _, p := range payments {
@@ -466,7 +467,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 		ginkgo.Context("when payments with status exist", func() {
 			ginkgo.It("should return payments with specified status", func() {
 				// When
-				results, err := repo.GetPaymentsByStatus(payment.StatusSuccess, 0, 10)
+				results, err := repo.GetPaymentsByStatus(paymentpkg.StatusSuccess, 0, 10)
 
 				// Then
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -478,7 +479,7 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 
 			ginkgo.It("should respect offset and limit", func() {
 				// When
-				results, err := repo.GetPaymentsByStatus(payment.StatusSuccess, 1, 1)
+				results, err := repo.GetPaymentsByStatus(paymentpkg.StatusSuccess, 1, 1)
 
 				// Then
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -503,12 +504,12 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 		ginkgo.BeforeEach(func() {
 			// Create test payments with different statuses
 			payments := []*payment.Payment{
-				{ExpenseID: 1, ExternalID: "ext-1", AmountIDR: 50000, Status: payment.StatusSuccess},
-				{ExpenseID: 2, ExternalID: "ext-2", AmountIDR: 75000, Status: payment.StatusSuccess},
-				{ExpenseID: 3, ExternalID: "ext-3", AmountIDR: 100000, Status: payment.StatusPending},
-				{ExpenseID: 4, ExternalID: "ext-4", AmountIDR: 25000, Status: payment.StatusFailed},
-				{ExpenseID: 5, ExternalID: "ext-5", AmountIDR: 30000, Status: payment.StatusFailed},
-				{ExpenseID: 6, ExternalID: "ext-6", AmountIDR: 40000, Status: payment.StatusFailed},
+				{ExpenseID: 1, ExternalID: "ext-1", AmountIDR: 50000, Status: paymentpkg.StatusSuccess},
+				{ExpenseID: 2, ExternalID: "ext-2", AmountIDR: 75000, Status: paymentpkg.StatusSuccess},
+				{ExpenseID: 3, ExternalID: "ext-3", AmountIDR: 100000, Status: paymentpkg.StatusPending},
+				{ExpenseID: 4, ExternalID: "ext-4", AmountIDR: 25000, Status: paymentpkg.StatusFailed},
+				{ExpenseID: 5, ExternalID: "ext-5", AmountIDR: 30000, Status: paymentpkg.StatusFailed},
+				{ExpenseID: 6, ExternalID: "ext-6", AmountIDR: 40000, Status: paymentpkg.StatusFailed},
 			}
 
 			for _, p := range payments {
@@ -525,9 +526,9 @@ var _ = ginkgo.Describe("PaymentRepository", func() {
 				// Then
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 				gomega.Expect(stats).To(gomega.HaveLen(3))
-				gomega.Expect(stats[payment.StatusSuccess]).To(gomega.Equal(int64(2)))
-				gomega.Expect(stats[payment.StatusPending]).To(gomega.Equal(int64(1)))
-				gomega.Expect(stats[payment.StatusFailed]).To(gomega.Equal(int64(3)))
+				gomega.Expect(stats[paymentpkg.StatusSuccess]).To(gomega.Equal(int64(2)))
+				gomega.Expect(stats[paymentpkg.StatusPending]).To(gomega.Equal(int64(1)))
+				gomega.Expect(stats[paymentpkg.StatusFailed]).To(gomega.Equal(int64(3)))
 			})
 		})
 	})

@@ -4,34 +4,32 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	expenseDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/expense"
 )
 
-// PaymentProcessor interface defines payment processing methods
-type PaymentProcessor interface {
-	ProcessPayment(expenseID int64, amount int64) (externalID string, err error)
-	RetryPayment(expenseID int64, externalID string) error
-	GetPaymentStatus(expenseID int64) (interface{}, error) // Returns payment view
-}
-
-// Repository interface defines the data access methods for expenses
-type Repository interface {
-	Create(expense *Expense) error
-	GetByID(id int64) (*Expense, error)
-	GetByUserID(userID int64, limit, offset int) ([]*Expense, error)
-	GetAllExpenses(limit, offset int) ([]*Expense, error)
-	Update(expense *Expense) error
+type RepositoryAPI interface {
+	Create(expense *expenseDatamodel.Expense) error
+	GetByID(id int64) (*expenseDatamodel.Expense, error)
+	GetByUserID(userID int64, limit, offset int) ([]*expenseDatamodel.Expense, error)
+	GetAllExpenses(limit, offset int) ([]*expenseDatamodel.Expense, error)
+	Update(expense *expenseDatamodel.Expense) error
 	UpdateStatus(id int64, status string, processedAt time.Time) error
 }
 
-// Service handles expense business logic
+type PaymentProcessorAPI interface {
+	ProcessPayment(expenseID int64, amount int64) (externalID string, err error)
+	RetryPayment(expenseID int64, externalID string) error
+	GetPaymentStatus(expenseID int64) (interface{}, error)
+}
+
 type Service struct {
-	repo             Repository
-	paymentProcessor PaymentProcessor
+	repo             RepositoryAPI
+	paymentProcessor PaymentProcessorAPI
 	logger           *slog.Logger
 }
 
-// NewService creates a new expense service
-func NewService(repo Repository, paymentProcessor PaymentProcessor, logger *slog.Logger) *Service {
+func NewService(repo RepositoryAPI, paymentProcessor PaymentProcessorAPI, logger *slog.Logger) *Service {
 	return &Service{
 		repo:             repo,
 		paymentProcessor: paymentProcessor,
@@ -39,44 +37,25 @@ func NewService(repo Repository, paymentProcessor PaymentProcessor, logger *slog
 	}
 }
 
-// CreateExpense creates a new expense with automatic approval logic
-func (s *Service) CreateExpense(userID int64, dto CreateExpenseDTO) (*Expense, error) {
-	if err := dto.Validate(); err != nil {
+func (s *Service) CreateExpense(req *CreateExpenseDTO, userID int64) (*Expense, error) {
+	if err := req.Validate(); err != nil {
 		s.logger.Error("expense validation failed", "error", err, "user_id", userID)
 		return nil, err
 	}
 
-	// Determine initial status based on amount
-	status := ExpenseStatusPendingApproval
-	var processedAt *time.Time
-	if dto.AmountIDR < AutoApprovalThreshold {
-		status = ExpenseStatusApproved
-		now := time.Now()
-		processedAt = &now
-	}
+	expense := NewExpense(userID, *req)
 
-	expense := &Expense{
-		UserID:          userID,
-		AmountIDR:       dto.AmountIDR,
-		Description:     dto.Description,
-		Category:        dto.Category,
-		ReceiptURL:      dto.ReceiptURL,
-		ReceiptFileName: dto.ReceiptFileName,
-		ExpenseStatus:   status,
-		ExpenseDate:     dto.ExpenseDate,
-		SubmittedAt:     time.Now(),
-		ProcessedAt:     processedAt,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
-	}
-
-	if err := s.repo.Create(expense); err != nil {
+	// Convert to datamodel for repository
+	expenseData := ToDataModel(expense)
+	if err := s.repo.Create(expenseData); err != nil {
 		s.logger.Error("failed to create expense", "error", err, "user_id", userID)
-		return nil, err
+		return nil, fmt.Errorf("failed to create expense: %w", err)
 	}
 
-	// If expense is approved (auto-approved), trigger payment processing
-	if status == ExpenseStatusApproved {
+	// Update domain entity with generated ID
+	expense.ID = expenseData.ID
+
+	if expense.NeedsPaymentProcessing() {
 		s.logger.Info("expense auto-approved, triggering payment",
 			"expense_id", expense.ID,
 			"amount", expense.AmountIDR)
@@ -87,22 +66,23 @@ func (s *Service) CreateExpense(userID int64, dto CreateExpenseDTO) (*Expense, e
 	s.logger.Info("expense created successfully",
 		"expense_id", expense.ID,
 		"user_id", userID,
-		"amount", dto.AmountIDR,
-		"status", status)
+		"amount", req.AmountIDR,
+		"status", expense.ExpenseStatus)
 
 	return expense, nil
 }
 
-// GetExpenseByID retrieves an expense by ID with access control
-func (s *Service) GetExpenseByID(id, userID int64, isManager bool) (*Expense, error) {
-	expense, err := s.repo.GetByID(id)
+func (s *Service) GetExpenseByID(id, userID int64, userPermissions []string) (*Expense, error) {
+	expenseData, err := s.repo.GetByID(id)
 	if err != nil {
 		s.logger.Error("failed to get expense", "error", err, "expense_id", id)
 		return nil, ErrExpenseNotFound
 	}
 
-	// Check access permissions
-	if !isManager && expense.UserID != userID {
+	// Convert to domain entity
+	expense := FromDataModel(expenseData)
+
+	if !expense.CanBeAccessedBy(userID, userPermissions) {
 		s.logger.Warn("unauthorized access to expense", "expense_id", id, "user_id", userID, "expense_user_id", expense.UserID)
 		return nil, ErrUnauthorizedAccess
 	}
@@ -110,34 +90,60 @@ func (s *Service) GetExpenseByID(id, userID int64, isManager bool) (*Expense, er
 	return expense, nil
 }
 
-// GetUserExpenses retrieves expenses for a specific user
+func (s *Service) GetExpensesByUserID(userID int64, userPermissions []string) ([]*Expense, error) {
+	// This is a wrapper around GetUserExpenses with no pagination
+	return s.GetUserExpenses(userID, 100, 0) // Default limit
+}
+
+func (s *Service) UpdateExpenseStatus(expenseID int64, status string, userID int64, userPermissions []string) (*Expense, error) {
+	// Update status via repository
+	if err := s.repo.UpdateStatus(expenseID, status, time.Now()); err != nil {
+		s.logger.Error("failed to update expense status", "error", err, "expense_id", expenseID, "status", status)
+		return nil, err
+	}
+
+	// Return updated expense
+	return s.GetExpenseByID(expenseID, userID, userPermissions)
+}
+
+func (s *Service) SubmitExpenseForApproval(expenseID int64, userID int64, userPermissions []string) (*Expense, error) {
+	return s.UpdateExpenseStatus(expenseID, "submitted", userID, userPermissions)
+}
+
 func (s *Service) GetUserExpenses(userID int64, limit, offset int) ([]*Expense, error) {
-	expenses, err := s.repo.GetByUserID(userID, limit, offset)
+	expensesData, err := s.repo.GetByUserID(userID, limit, offset)
 	if err != nil {
 		s.logger.Error("failed to get user expenses", "error", err, "user_id", userID)
 		return nil, err
 	}
 
-	return expenses, nil
+	return FromDataModelSlice(expensesData), nil
 }
 
-func (s *Service) GetAllExpenses(limit, offset int, userPermissions []string) ([]*Expense, error) {
-	if !s.hasManagerPermissions(userPermissions) {
-		s.logger.Warn("get all expenses denied: insufficient permissions", "permissions", userPermissions)
-		return nil, ErrUnauthorizedAccess
-	}
-
-	expenses, err := s.repo.GetAllExpenses(limit, offset)
+func (s *Service) GetAllExpenses(limit, offset int) ([]*Expense, error) {
+	expensesData, err := s.repo.GetAllExpenses(limit, offset)
 	if err != nil {
 		s.logger.Error("failed to get all expenses", "error", err)
 		return nil, err
 	}
 
-	return expenses, nil
+	return FromDataModelSlice(expensesData), nil
+}
+
+func (s *Service) GetExpensesForUser(userID int64, userPermissions []string, limit, offset int) ([]*Expense, error) {
+	if CanViewAllExpenses(userPermissions) {
+		s.logger.Info("GetExpensesForUser: user has management permissions, returning all expenses",
+			"user_id", userID, "permissions", userPermissions)
+		return s.GetAllExpenses(limit, offset)
+	} else {
+		s.logger.Info("GetExpensesForUser: regular user, returning only user's expenses",
+			"user_id", userID, "permissions", userPermissions)
+		return s.GetUserExpenses(userID, limit, offset)
+	}
 }
 
 func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []string) error {
-	if !s.hasManagerPermissions(userPermissions) {
+	if !HasManagerPermissions(userPermissions) {
 		s.logger.Warn("approve expense denied: insufficient permissions",
 			"expense_id", expenseID,
 			"manager_id", managerID,
@@ -145,21 +151,27 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 		return ErrUnauthorizedAccess
 	}
 
-	expense, err := s.repo.GetByID(expenseID)
+	expenseData, err := s.repo.GetByID(expenseID)
 	if err != nil {
 		s.logger.Error("expense not found for approval", "error", err, "expense_id", expenseID)
 		return ErrExpenseNotFound
 	}
 
-	if expense.ExpenseStatus != ExpenseStatusPendingApproval {
+	// Convert to domain entity for business logic
+	expense := FromDataModel(expenseData)
+
+	if !expense.CanBeApproved() {
 		s.logger.Warn("cannot approve expense in current status",
 			"expense_id", expenseID,
 			"current_status", expense.ExpenseStatus)
 		return ErrInvalidExpenseStatus
 	}
 
-	processedAt := time.Now()
-	if err := s.repo.UpdateStatus(expenseID, ExpenseStatusApproved, processedAt); err != nil {
+	expense.Approve()
+
+	// Convert back to datamodel for repository update
+	updatedExpenseData := ToDataModel(expense)
+	if err := s.repo.Update(updatedExpenseData); err != nil {
 		s.logger.Error("failed to update expense status to approved", "error", err, "expense_id", expenseID)
 		return err
 	}
@@ -179,7 +191,7 @@ func (s *Service) ApproveExpense(expenseID, managerID int64, userPermissions []s
 }
 
 func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userPermissions []string) error {
-	if !s.hasManagerPermissions(userPermissions) {
+	if !HasManagerPermissions(userPermissions) {
 		s.logger.Warn("reject expense denied: insufficient permissions",
 			"expense_id", expenseID,
 			"manager_id", managerID,
@@ -187,21 +199,27 @@ func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userP
 		return ErrUnauthorizedAccess
 	}
 
-	expense, err := s.repo.GetByID(expenseID)
+	expenseData, err := s.repo.GetByID(expenseID)
 	if err != nil {
 		s.logger.Error("expense not found for rejection", "error", err, "expense_id", expenseID)
 		return ErrExpenseNotFound
 	}
 
-	if expense.ExpenseStatus != ExpenseStatusPendingApproval {
+	// Convert to domain entity for business logic
+	expense := FromDataModel(expenseData)
+
+	if !expense.CanBeRejected() {
 		s.logger.Warn("cannot reject expense in current status",
 			"expense_id", expenseID,
 			"current_status", expense.ExpenseStatus)
 		return ErrInvalidExpenseStatus
 	}
 
-	processedAt := time.Now()
-	if err := s.repo.UpdateStatus(expenseID, ExpenseStatusRejected, processedAt); err != nil {
+	expense.Reject()
+
+	// Convert back to datamodel for repository update
+	updatedExpenseData := ToDataModel(expense)
+	if err := s.repo.Update(updatedExpenseData); err != nil {
 		s.logger.Error("failed to update expense status to rejected", "error", err, "expense_id", expenseID)
 		return err
 	}
@@ -215,36 +233,8 @@ func (s *Service) RejectExpense(expenseID, managerID int64, reason string, userP
 	return nil
 }
 
-// hasManagerPermissions checks if user has manager-level permissions
-func (s *Service) hasManagerPermissions(userPermissions []string) bool {
-	managerPerms := []string{"approve_expenses", "reject_expenses", "admin", "manager"}
-	for _, requiredPerm := range managerPerms {
-		for _, userPerm := range userPermissions {
-			if userPerm == requiredPerm {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (s *Service) processPaymentAsync(expenseID int64, amount int64) {
-	s.logger.Info("starting payment processing", "expense_id", expenseID, "amount", amount)
-
-	externalID, err := s.paymentProcessor.ProcessPayment(expenseID, amount)
-	if err != nil {
-		s.logger.Error("payment processing failed", "error", err, "expense_id", expenseID, "external_id", externalID)
-		return
-	}
-
-	s.logger.Info("payment processing initiated successfully",
-		"expense_id", expenseID,
-		"external_id", externalID)
-}
-
 func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error {
-	// Check permissions (managers can retry payments)
-	if !s.hasManagerPermissions(userPermissions) {
+	if !HasManagerPermissions(userPermissions) {
 		s.logger.Warn("user lacks manager permissions for payment retry", "expense_id", expenseID)
 		return ErrUnauthorizedAccess
 	}
@@ -260,7 +250,6 @@ func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error 
 		return ErrInvalidExpenseStatus
 	}
 
-	// Get payment status from payment service to validate it exists
 	_, err = s.paymentProcessor.GetPaymentStatus(expenseID)
 	if err != nil {
 		s.logger.Error("failed to get payment status", "error", err, "expense_id", expenseID)
@@ -277,4 +266,18 @@ func (s *Service) RetryPayment(expenseID int64, userPermissions []string) error 
 	}
 
 	return nil
+}
+
+func (s *Service) processPaymentAsync(expenseID int64, amount int64) {
+	s.logger.Info("starting payment processing", "expense_id", expenseID, "amount", amount)
+
+	externalID, err := s.paymentProcessor.ProcessPayment(expenseID, amount)
+	if err != nil {
+		s.logger.Error("payment processing failed", "error", err, "expense_id", expenseID, "external_id", externalID)
+		return
+	}
+
+	s.logger.Info("payment processing initiated successfully",
+		"expense_id", expenseID,
+		"external_id", externalID)
 }
