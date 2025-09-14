@@ -1,6 +1,8 @@
 package expense
 
 import (
+	"net/http"
+	"strconv"
 	"time"
 
 	errors "github.com/frahmantamala/expense-management/internal"
@@ -96,8 +98,52 @@ func (q *ExpenseQueryParams) SetDefaults() {
 	}
 }
 
+func (q *ExpenseQueryParams) ParseFromRequest(r *http.Request) {
+
+	if perPageStr := r.URL.Query().Get("per_page"); perPageStr != "" {
+		if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 && pp <= 100 {
+			q.PerPage = pp
+		}
+	}
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			q.Page = p
+		}
+	} else if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+
+			if q.PerPage <= 0 {
+				q.PerPage = 20
+			}
+
+			if q.PerPage > 0 {
+				q.Page = (offset / q.PerPage) + 1
+			} else {
+				q.Page = 1
+			}
+		}
+	}
+
+	q.Search = r.URL.Query().Get("search")
+
+	q.CategoryID = r.URL.Query().Get("category_id")
+
+	q.Status = r.URL.Query().Get("status")
+
+	q.SortBy = r.URL.Query().Get("sort_by")
+	q.SortOrder = r.URL.Query().Get("sort_order")
+
+	q.SetDefaults()
+}
+
 func (q *ExpenseQueryParams) GetOffset() int {
-	return (q.Page - 1) * q.PerPage
+	offset := (q.Page - 1) * q.PerPage
+	if offset < 0 {
+		return 0
+	}
+	return offset
 }
 
 var (

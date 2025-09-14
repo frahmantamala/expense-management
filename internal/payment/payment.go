@@ -2,9 +2,18 @@ package payment
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
+)
+
+// Payment errors
+var (
+	ErrExternalIDAlreadyExists = errors.New("external_id already exists")
+	ErrPaymentNotFound         = errors.New("payment not found")
+	ErrInvalidPaymentStatus    = errors.New("invalid payment status")
 )
 
 type ServiceAPI interface {
@@ -12,6 +21,8 @@ type ServiceAPI interface {
 	ProcessPayment(req *PaymentRequest) (*PaymentResponse, error)
 	RetryPayment(req *PaymentRequest) (*PaymentResponse, error)
 	GetPaymentByExpenseID(expenseID int64) (*payment.Payment, error)
+	GetPaymentByExternalID(externalID string) (*payment.Payment, error)
+	UpdatePaymentStatus(paymentID int64, status string, paymentMethod *string, gatewayResponse json.RawMessage, failureReason *string) error
 }
 
 type PaymentView struct {
@@ -93,7 +104,7 @@ func IsPending(p *payment.Payment) bool {
 }
 
 func MapExternalStatus(externalStatus string) string {
-	switch externalStatus {
+	switch strings.ToLower(externalStatus) {
 	case "success", "completed", "paid":
 		return StatusSuccess
 	case "failed", "cancelled", "declined":

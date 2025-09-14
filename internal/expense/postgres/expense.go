@@ -36,7 +36,6 @@ func (r *ExpenseRepository) GetByUserID(userID int64, params *expense.ExpenseQue
 	var expenses []*expenseDatamodel.Expense
 	query := r.db.Model(&expenseDatamodel.Expense{}).Where("user_id = ?", userID)
 
-	// Apply common query filters
 	query = r.applyQueryFilters(query, params)
 
 	err := query.Find(&expenses).Error
@@ -47,33 +46,28 @@ func (r *ExpenseRepository) GetAllExpenses(params *expense.ExpenseQueryParams) (
 	var expenses []*expenseDatamodel.Expense
 	query := r.db.Model(&expenseDatamodel.Expense{})
 
-	// Apply common query filters
 	query = r.applyQueryFilters(query, params)
 
 	err := query.Find(&expenses).Error
 	return expenses, err
 }
 
-// Helper method to apply common query filters
 func (r *ExpenseRepository) applyQueryFilters(query *gorm.DB, params *expense.ExpenseQueryParams) *gorm.DB {
-	// Search functionality
+
 	if params.Search != "" {
 		searchPattern := "%" + params.Search + "%"
 		query = query.Where("description ILIKE ? OR category ILIKE ?", searchPattern, searchPattern)
 	}
 
-	// Category filter
 	if params.CategoryID != "" {
 		query = query.Where("category = ?", params.CategoryID)
 	}
 
-	// Status filter
 	if params.Status != "" {
 		query = query.Where("expense_status = ?", params.Status)
 	}
 
-	// Sorting
-	orderClause := "created_at DESC" // Default fallback
+	orderClause := "created_at DESC"
 	switch params.SortBy {
 	case "createdAt":
 		orderClause = "created_at"
@@ -98,9 +92,49 @@ func (r *ExpenseRepository) applyQueryFilters(query *gorm.DB, params *expense.Ex
 		}
 	}
 
+	offset := params.GetOffset()
+
 	return query.Order(orderClause).
 		Limit(params.PerPage).
-		Offset(params.GetOffset())
+		Offset(offset)
+}
+
+func (r *ExpenseRepository) applyQueryFiltersForCount(query *gorm.DB, params *expense.ExpenseQueryParams) *gorm.DB {
+
+	if params.Search != "" {
+		searchPattern := "%" + params.Search + "%"
+		query = query.Where("description ILIKE ? OR category ILIKE ?", searchPattern, searchPattern)
+	}
+
+	if params.CategoryID != "" {
+		query = query.Where("category = ?", params.CategoryID)
+	}
+
+	if params.Status != "" {
+		query = query.Where("expense_status = ?", params.Status)
+	}
+
+	return query
+}
+
+func (r *ExpenseRepository) CountByUserID(userID int64, params *expense.ExpenseQueryParams) (int64, error) {
+	var count int64
+	query := r.db.Model(&expenseDatamodel.Expense{}).Where("user_id = ?", userID)
+
+	query = r.applyQueryFiltersForCount(query, params)
+
+	err := query.Count(&count).Error
+	return count, err
+}
+
+func (r *ExpenseRepository) CountAllExpenses(params *expense.ExpenseQueryParams) (int64, error) {
+	var count int64
+	query := r.db.Model(&expenseDatamodel.Expense{})
+
+	query = r.applyQueryFiltersForCount(query, params)
+
+	err := query.Count(&count).Error
+	return count, err
 }
 
 func (r *ExpenseRepository) Update(exp *expenseDatamodel.Expense) error {

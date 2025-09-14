@@ -2,6 +2,7 @@ package rest
 
 import (
 	"database/sql"
+	"log/slog"
 	"net/http"
 
 	"github.com/frahmantamala/expense-management/internal/auth"
@@ -12,16 +13,19 @@ import (
 	"github.com/frahmantamala/expense-management/internal/transport/swagger"
 	"github.com/frahmantamala/expense-management/internal/user"
 	"github.com/go-chi/chi"
+	chiMiddleware "github.com/go-chi/chi/middleware"
 )
 
-func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, authService *auth.Service, userHandler *user.Handler, expenseHandler *expense.Handler, categoryHandler *category.Handler, paymentHandler *payment.Handler) {
+func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, authService *auth.Service, userHandler *user.Handler, expenseHandler *expense.Handler, categoryHandler *category.Handler, paymentHandler *payment.Handler, webhookHandler *payment.WebhookHandler, logger *slog.Logger) {
 	healthHandler := NewHealthHandler(db)
 
 	// Get RBAC authorization from auth service
 	rbac := authService.RBACAuthorization()
 
-	// Apply CORS middleware to all routes
+	// Apply global middleware
 	router.Use(middleware.CORS)
+	router.Use(chiMiddleware.RequestID)
+	router.Use(middleware.RecoveryMiddleware(logger))
 
 	// Serve OpenAPI spec at root (outside API prefix)
 	router.Get("/openapi.yml", func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +39,10 @@ func RegisterAllRoutes(router *chi.Mux, db *sql.DB, authHandler *auth.Handler, a
 		// Health check route
 		r.Get("/health", healthHandler.healthCheckHandler)
 		r.Get("/ping", healthHandler.pingHandler)
+
+		if webhookHandler != nil {
+			r.Post("/payment/callback", webhookHandler.HandlePaymentCallback)
+		}
 
 		// Auth routes
 		if authHandler != nil {

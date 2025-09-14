@@ -43,7 +43,6 @@ var seedCmd = &cobra.Command{
 			fmt.Println("Seeded fadhil user:", fadhilEmail)
 		}
 
-		// Create admin user (can approve/reject expenses)
 		adminEmail := "padil@mail.com"
 		adminName := "Padil Admin"
 		row = db.Raw("SELECT 1 FROM users WHERE email = ?", adminEmail).Row()
@@ -60,7 +59,6 @@ var seedCmd = &cobra.Command{
 			fmt.Println("Seeded admin user:", adminEmail)
 		}
 
-		// seed permissions
 		permissions := []struct {
 			Name string
 			Desc string
@@ -78,14 +76,13 @@ var seedCmd = &cobra.Command{
 			var pid int64
 			row := db.Raw("SELECT id FROM permissions WHERE name = ?", p.Name).Row()
 			if err := row.Scan(&pid); err != nil {
-				// not found -> insert
+
 				if err := db.Exec("INSERT INTO permissions (name, description, created_at) VALUES (?, ?, now())", p.Name, p.Desc).Error; err != nil {
 					log.Fatalf("failed to insert permission %s: %v", p.Name, err)
 				}
 			}
 		}
 
-		// grant full permissions to admin user
 		var adminUserID int64
 		if err := db.Raw("SELECT id FROM users WHERE email = ?", adminEmail).Row().Scan(&adminUserID); err != nil {
 			log.Fatalf("failed to lookup admin user id: %v", err)
@@ -109,13 +106,11 @@ var seedCmd = &cobra.Command{
 
 		fmt.Println("Granted all permissions to admin user:", adminEmail)
 
-		// grant limited permissions to fadhil user (only create expenses)
 		var fadhilUserID int64
 		if err := db.Raw("SELECT id FROM users WHERE email = ?", fadhilEmail).Row().Scan(&fadhilUserID); err != nil {
 			log.Fatalf("failed to lookup fadhil user id: %v", err)
 		}
 
-		// Fadhil user gets only create expenses permission
 		fadhilUserPermissions := []string{"view_expenses", "create_expenses"}
 		for _, permName := range fadhilUserPermissions {
 			var pid int64
@@ -135,7 +130,6 @@ var seedCmd = &cobra.Command{
 
 		fmt.Println("Granted limited permissions to fadhil user (can only create expenses):", fadhilEmail)
 
-		// seed expense categories
 		categories := []struct {
 			Name string
 			Desc string
@@ -151,7 +145,7 @@ var seedCmd = &cobra.Command{
 			var exists int
 			row := db.Raw("SELECT 1 FROM expense_categories WHERE name = ?", c.Name).Row()
 			if err := row.Scan(&exists); err != nil {
-				// not found -> insert
+
 				if err := db.Exec("INSERT INTO expense_categories (name, description, is_active, created_at) VALUES (?, ?, true, now())", c.Name, c.Desc).Error; err != nil {
 					log.Fatalf("failed to insert expense category %s: %v", c.Name, err)
 				}

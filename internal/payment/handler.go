@@ -15,21 +15,19 @@ type ExpenseServiceAPI interface {
 }
 
 type Handler struct {
-	transport.BaseHandler
+	*transport.BaseHandler
 	ExpenseService ExpenseServiceAPI
 	PaymentService ServiceAPI
-	Logger         *slog.Logger
 }
 
 func NewHandler(expenseService ExpenseServiceAPI, paymentService ServiceAPI, logger *slog.Logger) *Handler {
 	return &Handler{
+		BaseHandler:    transport.NewBaseHandler(logger),
 		ExpenseService: expenseService,
 		PaymentService: paymentService,
-		Logger:         logger,
 	}
 }
 
-// RetryPayment handles POST /api/v1/payment/retry
 func (h *Handler) RetryPayment(w http.ResponseWriter, r *http.Request) {
 	user, ok := errors.UserFromContext(r.Context())
 	if !ok || user == nil {
@@ -51,7 +49,6 @@ func (h *Handler) RetryPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse expense ID
 	expenseID, err := strconv.ParseInt(req.ExpenseID, 10, 64)
 	if err != nil {
 		h.Logger.Error("RetryPayment: invalid expense ID", "expense_id", req.ExpenseID)

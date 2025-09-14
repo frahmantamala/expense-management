@@ -16,7 +16,6 @@ import (
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
 	"github.com/frahmantamala/expense-management/internal/expense"
 	paymentpkg "github.com/frahmantamala/expense-management/internal/payment"
-	"github.com/frahmantamala/expense-management/internal/transport"
 )
 
 type mockExpenseService struct {
@@ -45,14 +44,15 @@ func (m *mockExpenseService) RetryPayment(expenseID int64, userPermissions []str
 	return nil
 }
 
-// Mock PaymentService for testing
 type mockPaymentService struct {
-	createPaymentError       error
-	processPaymentError      error
-	retryPaymentError        error
-	getPaymentByExpenseError error
-	payment                  *payment.Payment
-	response                 *paymentpkg.PaymentResponse
+	createPaymentError        error
+	processPaymentError       error
+	retryPaymentError         error
+	getPaymentByExpenseError  error
+	getPaymentByExternalError error
+	updatePaymentStatusError  error
+	payment                   *payment.Payment
+	response                  *paymentpkg.PaymentResponse
 }
 
 func (m *mockPaymentService) CreatePayment(expenseID int64, externalID string, amountIDR int64) (*payment.Payment, error) {
@@ -83,6 +83,17 @@ func (m *mockPaymentService) GetPaymentByExpenseID(expenseID int64) (*payment.Pa
 	return m.payment, nil
 }
 
+func (m *mockPaymentService) GetPaymentByExternalID(externalID string) (*payment.Payment, error) {
+	if m.getPaymentByExternalError != nil {
+		return nil, m.getPaymentByExternalError
+	}
+	return m.payment, nil
+}
+
+func (m *mockPaymentService) UpdatePaymentStatus(paymentID int64, status string, paymentMethod *string, gatewayResponse json.RawMessage, failureReason *string) error {
+	return m.updatePaymentStatusError
+}
+
 func createTestUser(id int64, permissions []string) *internal.User {
 	return &internal.User{
 		ID:          id,
@@ -95,7 +106,6 @@ func createRequestWithUser(method, target string, body []byte, user *internal.Us
 	req := httptest.NewRequest(method, target, bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add user to context
 	ctx := internal.ContextWithUser(req.Context(), user)
 	return req.WithContext(ctx)
 }
@@ -114,7 +124,6 @@ var _ = ginkgo.Describe("PaymentHandler", func() {
 		paymentService = &mockPaymentService{}
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 		handler = paymentpkg.NewHandler(expenseService, paymentService, logger)
-		handler.BaseHandler = *transport.NewBaseHandler(logger)
 		recorder = httptest.NewRecorder()
 	})
 
@@ -220,7 +229,7 @@ var _ = ginkgo.Describe("PaymentHandler", func() {
 
 		ginkgo.Context("when user lacks permission", func() {
 			ginkgo.It("should return forbidden error", func() {
-				user := createTestUser(1, []string{"can_read_expense"}) // No approval permission
+				user := createTestUser(1, []string{"can_read_expense"})
 				expenseService.shouldCheckPerm = true
 				reqBody := map[string]interface{}{
 					"expense_id":  "123",

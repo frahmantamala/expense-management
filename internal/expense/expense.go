@@ -26,7 +26,8 @@ const (
 	ExpenseStatusPendingApproval = "pending_approval"
 	ExpenseStatusApproved        = "approved"
 	ExpenseStatusRejected        = "rejected"
-	AutoApprovalThreshold        = 100000
+	ExpenseStatusCompleted       = "completed"
+	AutoApprovalThreshold        = 1000000
 )
 
 func (e *Expense) CanBeApproved() bool {
@@ -50,6 +51,13 @@ func (e *Expense) Approve() {
 
 func (e *Expense) Reject() {
 	e.ExpenseStatus = ExpenseStatusRejected
+	now := time.Now()
+	e.ProcessedAt = &now
+	e.UpdatedAt = now
+}
+
+func (e *Expense) Complete() {
+	e.ExpenseStatus = ExpenseStatusCompleted
 	now := time.Now()
 	e.ProcessedAt = &now
 	e.UpdatedAt = now

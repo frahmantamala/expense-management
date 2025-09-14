@@ -107,7 +107,7 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := h.ExtractTokenFromHeader(r)
 		if token == "" {
-			h.Logger.Error("auth middleware: missing authorization token")
+			h.Logger.Error("[auth middleware] missing authorization token")
 			h.WriteError(w, http.StatusUnauthorized, "missing authorization token")
 			return
 		}
@@ -116,7 +116,7 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 		if len(token) > 20 {
 			tokenPrefix = token[:20]
 		}
-		h.Logger.Info("auth middleware: validating token", "token_prefix", tokenPrefix)
+		h.Logger.Info("[auth middleware] validating token", "token_prefix", tokenPrefix)
 
 		claims, err := h.Service.ValidateAccessToken(token)
 		if err != nil {
@@ -125,7 +125,7 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		h.Logger.Info("auth middleware: token validated successfully", "user_id", claims.UserID, "email", claims.Email)
+		h.Logger.Info("[auth middleware] token validated successfully", "user_id", claims.UserID, "email", claims.Email)
 
 		var uid int64
 		if claims.UserID != "" {
@@ -138,14 +138,13 @@ func (h *Handler) AuthMiddleware(next http.Handler) http.Handler {
 
 		coreUser, err := h.Service.GetUserWithPermissions(uid)
 		if err != nil {
-			h.Logger.Error("auth middleware: failed to load user permissions", "user_id", uid, "error", err)
+			h.Logger.Error("[auth middleware] failed to load user permissions", "user_id", uid, "error", err)
 			h.WriteError(w, http.StatusUnauthorized, "user not found")
 			return
 		}
 
-		h.Logger.Info("auth middleware: adding user to context", "user_id", uid, "email", claims.Email)
+		h.Logger.Info("[auth middleware] adding user to context", "user_id", uid, "email", claims.Email)
 
-		// Convert auth.User to internal.User to avoid import cycles
 		internalUser := &internal.User{
 			ID:          coreUser.ID,
 			Email:       coreUser.Email,

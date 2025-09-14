@@ -15,20 +15,19 @@ import (
 	authPostgres "github.com/frahmantamala/expense-management/internal/auth/postgres"
 	"github.com/frahmantamala/expense-management/internal/category"
 	categoryPostgres "github.com/frahmantamala/expense-management/internal/category/postgres"
+	"github.com/frahmantamala/expense-management/internal/core/events"
 	"github.com/frahmantamala/expense-management/internal/expense"
 	expensePostgres "github.com/frahmantamala/expense-management/internal/expense/postgres"
 	"github.com/frahmantamala/expense-management/internal/payment"
 	paymentPostgres "github.com/frahmantamala/expense-management/internal/payment/postgres"
+	"github.com/frahmantamala/expense-management/internal/paymentgateway"
 	"github.com/frahmantamala/expense-management/internal/transport"
 	"github.com/frahmantamala/expense-management/internal/transport/rest"
-	user "github.com/frahmantamala/expense-management/internal/user"
-	userpostgres "github.com/frahmantamala/expense-management/internal/user/postgres"
+	"github.com/frahmantamala/expense-management/internal/user"
+	userPostgres "github.com/frahmantamala/expense-management/internal/user/postgres"
 	"github.com/frahmantamala/expense-management/pkg/logger"
 
-	cors "github.com/frahmantamala/expense-management/internal/transport/middleware"
-	loggingMiddleware "github.com/frahmantamala/expense-management/internal/transport/middleware"
 	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
 	"gorm.io/driver/postgres"
@@ -76,7 +75,6 @@ func startHTTPServer() {
 		IdleTimeout:  deps.Config.Server.IdleTimeout,
 	}
 
-	// Signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -112,12 +110,7 @@ func startHTTPServer() {
 }
 
 func setupRoutes(deps *Dependencies) {
-	deps.Router.Use(cors.CORS)
-	deps.Router.Use(middleware.RequestID)
-	deps.Router.Use(loggingMiddleware.LoggingMiddleware(deps.Logger))
-	deps.Router.Use(middleware.Recoverer)
 
-	// Initialize auth repository and service following ServiceAPI pattern
 	authRepo := authPostgres.NewRepository(deps.DB)
 	tokenGen := auth.NewJWTTokenGenerator(
 		deps.Config.Security.SessionSecret,
@@ -129,36 +122,55 @@ func setupRoutes(deps *Dependencies) {
 	authHandler := auth.NewHandler(authService)
 	deps.AuthHandler = authHandler
 
-	// Initialize user repository and service following ServiceAPI pattern
-	userRepo := userpostgres.NewRepository(deps.DB)
+	userRepo := userPostgres.NewRepository(deps.DB)
 	userSvc := user.NewService(userRepo)
 	userHandler := user.NewHandler(userSvc)
 	deps.UserHandler = userHandler
 
-	// Initialize expense repository and service following ServiceAPI pattern
 	expenseRepo := expensePostgres.NewExpenseRepository(deps.DB)
 
-	// Initialize payment repository and service following ServiceAPI pattern
-	paymentRepo := paymentPostgres.NewPaymentRepository(deps.DB)
-	paymentService := payment.NewPaymentService(deps.Config.Payment.MockAPIURL, deps.Logger, paymentRepo)
-	paymentProcessor := payment.NewExpensePaymentProcessor(paymentService, deps.Logger)
+	eventBus := events.NewEventBus(deps.Logger)
 
-	expenseService := expense.NewService(expenseRepo, paymentProcessor, deps.Logger)
+	paymentRepo := paymentPostgres.NewPaymentRepository(deps.DB)
+
+	paymentGateway := paymentgateway.NewClient(
+		paymentgateway.Config{
+			MockAPIURL:     deps.Config.Payment.MockAPIURL,
+			APIKey:         deps.Config.Payment.APIKey,
+			WebhookURL:     deps.Config.Payment.WebhookURL,
+			PaymentTimeout: deps.Config.Payment.PaymentTimeout,
+			MaxWorkers:     deps.Config.Payment.MaxWorkers,
+			JobQueueSize:   deps.Config.Payment.JobQueueSize,
+			WorkerPoolSize: deps.Config.Payment.WorkerPoolSize,
+		},
+		deps.Logger,
+	)
+
+	paymentService := payment.NewPaymentService(deps.Logger, paymentRepo, paymentGateway)
+	paymentOrchestrator := payment.NewPaymentOrchestrator(paymentService, deps.Logger)
+
+	permissionChecker := auth.NewPermissionChecker()
+
+	expenseService := expense.NewService(expenseRepo, paymentOrchestrator, permissionChecker, eventBus, deps.Logger)
+
+	paymentEventHandler := payment.NewEventHandler(paymentOrchestrator, deps.Logger)
+	paymentEventHandler.RegisterEventHandlers(eventBus)
+
 	expenseHandler := expense.NewHandler(expenseService)
 	deps.ExpenseHandler = expenseHandler
 
-	// Initialize category repository and service following ServiceAPI pattern
 	categoryRepo := categoryPostgres.NewCategoryRepository(deps.DB)
 	categoryService := category.NewService(categoryRepo, deps.Logger)
 	baseHandler := transport.NewBaseHandler(deps.Logger)
 	categoryHandler := category.NewHandler(baseHandler, categoryService)
 
-	// Initialize payment handler
 	paymentHandler := payment.NewHandler(expenseService, paymentService, deps.Logger)
 	deps.PaymentHandler = paymentHandler
 
+	webhookHandler := payment.NewWebhookHandler(baseHandler, paymentService, eventBus, deps.Logger)
+
 	sqlDBForRoutes, _ := deps.DB.DB()
-	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, authService, deps.UserHandler, deps.ExpenseHandler, categoryHandler, deps.PaymentHandler)
+	rest.RegisterAllRoutes(deps.Router, sqlDBForRoutes, deps.AuthHandler, authService, deps.UserHandler, deps.ExpenseHandler, categoryHandler, deps.PaymentHandler, webhookHandler, deps.Logger)
 }
 
 func initializeDependencies() (*Dependencies, error) {
@@ -188,7 +200,6 @@ func initializeDependencies() (*Dependencies, error) {
 	}, nil
 }
 
-// initDB initializes the database connection
 func initDB(cfg internal.DatabaseConfig) (*gorm.DB, error) {
 	gormDB, err := gorm.Open(postgres.Open(cfg.Source), &gorm.Config{})
 	if err != nil {

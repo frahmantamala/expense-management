@@ -1,15 +1,13 @@
 package payment
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/frahmantamala/expense-management/internal/core/datamodel/payment"
+	paymentgatewaytypes "github.com/frahmantamala/expense-management/internal/core/datamodel/paymentgateway"
+	"github.com/frahmantamala/expense-management/internal/paymentgateway"
 )
 
 type RepositoryAPI interface {
@@ -23,27 +21,34 @@ type RepositoryAPI interface {
 }
 
 type PaymentService struct {
-	client     *http.Client
-	baseURL    string
 	logger     *slog.Logger
 	repository RepositoryAPI
+	gateway    *paymentgateway.Client
 }
 
-func NewPaymentService(baseURL string, logger *slog.Logger, repository RepositoryAPI) *PaymentService {
+func NewPaymentService(logger *slog.Logger, repository RepositoryAPI, gateway *paymentgateway.Client) *PaymentService {
 	return &PaymentService{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		baseURL:    baseURL,
 		logger:     logger,
 		repository: repository,
+		gateway:    gateway,
 	}
 }
 
 func (s *PaymentService) CreatePayment(expenseID int64, externalID string, amountIDR int64) (*payment.Payment, error) {
+	// Check if external_id already exists for idempotency
+	existingPayment, err := s.repository.GetByExternalID(externalID)
+	if err == nil && existingPayment != nil {
+		s.logger.Warn("external_id already exists, rejecting duplicate payment creation",
+			"external_id", externalID,
+			"existing_payment_id", existingPayment.ID,
+			"existing_expense_id", existingPayment.ExpenseID,
+			"new_expense_id", expenseID)
+		return nil, fmt.Errorf("external_id %s already exists", externalID)
+	}
+
 	paymentEntity := NewPayment(expenseID, externalID, amountIDR)
 
-	err := s.repository.Create(paymentEntity)
+	err = s.repository.Create(paymentEntity)
 	if err != nil {
 		s.logger.Error("failed to create payment record", "error", err, "expense_id", expenseID)
 		return nil, fmt.Errorf("failed to create payment record: %w", err)
@@ -54,10 +59,6 @@ func (s *PaymentService) CreatePayment(expenseID int64, externalID string, amoun
 }
 
 func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, error) {
-	if err := req.Validate(); err != nil {
-		s.logger.Error("payment request validation failed", "error", err)
-		return nil, fmt.Errorf("validation error: %w", err)
-	}
 
 	paymentRecord, err := s.repository.GetByExternalID(req.ExternalID)
 	if err != nil {
@@ -65,80 +66,47 @@ func (s *PaymentService) ProcessPayment(req *PaymentRequest) (*PaymentResponse, 
 		return nil, fmt.Errorf("payment record not found: %w", err)
 	}
 
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		s.logger.Error("failed to marshal payment request", "error", err)
-		return nil, fmt.Errorf("marshal error: %w", err)
+	gatewayReq := &paymentgatewaytypes.PaymentRequest{
+		ExternalID: req.ExternalID,
+		Amount:     req.Amount,
+		Currency:   "IDR",
 	}
 
-	url := fmt.Sprintf("%s/v1/payments", s.baseURL)
-	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	gatewayResp, err := s.gateway.ProcessPayment(gatewayReq)
 	if err != nil {
-		s.logger.Error("failed to create HTTP request", "error", err)
-		return nil, fmt.Errorf("request creation error: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	s.logger.Info("sending payment request",
-		"url", url,
-		"external_id", req.ExternalID,
-		"amount", req.Amount)
-
-	resp, err := s.client.Do(httpReq)
-	if err != nil {
-		s.logger.Error("payment request failed", "error", err, "external_id", req.ExternalID)
+		s.logger.Error("payment gateway error", "error", err, "external_id", req.ExternalID)
 
 		failureReason := err.Error()
 		updateErr := s.repository.UpdateStatus(paymentRecord.ID, StatusFailed, nil, nil, &failureReason)
 		if updateErr != nil {
-			s.logger.Error("failed to update payment status after HTTP error", "error", updateErr, "payment_id", paymentRecord.ID)
+			s.logger.Error("failed to update payment status after gateway error", "error", updateErr, "payment_id", paymentRecord.ID)
 		}
 
-		return nil, fmt.Errorf("HTTP request error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		s.logger.Error("failed to read response body", "error", err)
-		return nil, fmt.Errorf("response read error: %w", err)
+		return nil, fmt.Errorf("payment processing failed: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		s.logger.Error("payment API returned error",
-			"status", resp.StatusCode,
-			"response", string(respBody),
-			"external_id", req.ExternalID)
+	status := MapExternalStatus(string(gatewayResp.Data.Status))
+	respBody, _ := json.Marshal(gatewayResp)
 
-		failureReason := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(respBody))
-		updateErr := s.repository.UpdateStatus(paymentRecord.ID, StatusFailed, nil, respBody, &failureReason)
-		if updateErr != nil {
-			s.logger.Error("failed to update payment status after API error", "error", updateErr, "payment_id", paymentRecord.ID)
-		}
-
-		return nil, fmt.Errorf("payment API error: status %d, response: %s", resp.StatusCode, string(respBody))
+	paymentResp := &PaymentResponse{
+		Data: PaymentData{
+			ID:         gatewayResp.Data.ID,
+			ExternalID: gatewayResp.Data.ExternalID,
+			Status:     status,
+		},
 	}
-
-	var paymentResp PaymentResponse
-	if err := json.Unmarshal(respBody, &paymentResp); err != nil {
-		s.logger.Error("failed to unmarshal payment response", "error", err, "response", string(respBody))
-		return nil, fmt.Errorf("response unmarshal error: %w", err)
-	}
-
-	status := MapExternalStatus(paymentResp.Data.Status)
 
 	err = s.repository.UpdateStatus(paymentRecord.ID, status, nil, respBody, nil)
 	if err != nil {
 		s.logger.Error("failed to update payment status", "error", err, "payment_id", paymentRecord.ID)
 	}
 
-	s.logger.Info("payment processed successfully",
+	s.logger.Info("payment successfully",
 		"payment_id", paymentResp.Data.ID,
 		"external_id", paymentResp.Data.ExternalID,
 		"status", paymentResp.Data.Status)
 
-	return &paymentResp, nil
+	return paymentResp, nil
 }
 
 func (s *PaymentService) RetryPayment(req *PaymentRequest) (*PaymentResponse, error) {
@@ -160,4 +128,12 @@ func (s *PaymentService) RetryPayment(req *PaymentRequest) (*PaymentResponse, er
 
 func (s *PaymentService) GetPaymentByExpenseID(expenseID int64) (*payment.Payment, error) {
 	return s.repository.GetLatestByExpenseID(expenseID)
+}
+
+func (s *PaymentService) GetPaymentByExternalID(externalID string) (*payment.Payment, error) {
+	return s.repository.GetByExternalID(externalID)
+}
+
+func (s *PaymentService) UpdatePaymentStatus(paymentID int64, status string, paymentMethod *string, gatewayResponse json.RawMessage, failureReason *string) error {
+	return s.repository.UpdateStatus(paymentID, status, paymentMethod, gatewayResponse, failureReason)
 }

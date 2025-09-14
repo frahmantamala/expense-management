@@ -17,7 +17,6 @@ func TestCategoryService(t *testing.T) {
 	RunSpecs(t, "Category Service Suite")
 }
 
-// MockRepository implements category.Repository for testing
 type MockRepository struct {
 	categories map[string]*categoryDatamodel.ExpenseCategory
 	shouldFail bool
@@ -97,7 +96,6 @@ func (m *MockRepository) Delete(id int64) error {
 	return nil
 }
 
-// Helper methods for testing
 func (m *MockRepository) SetShouldFail(shouldFail bool, err error) {
 	m.shouldFail = shouldFail
 	m.failError = err

@@ -12,18 +12,24 @@ database:
   max_idle_conns: 10
   conn_max_lifetime: 60m
   conn_max_idle_time: 10m
-  # Update the source with your actual database credentials
+  # update the source with your actual database credentials
   source: "postgresql://root:secret@localhost:5432/expense_management_db?sslmode=disable"
 
 security:
   access_token_duration: 15m
   refresh_token_duration: 24h
   bcrypt_cost: 12
-  # Base64 encoded session secret
+  # base64 encoded session secret
   session_secret: "jwt-secret-key"
 
 payment:
-  mock_api_url: "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io"
+  mock_api_url: "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io/v1"
+  api_key: "your-api-key-here"
+  payment_timeout: 10s
+  webhook_url: "http://localhost:8080/api/v1/payment/callback"
+  max_workers: 10
+  job_queue_size: 100
+  worker_pool_size: 10
 
 observability:
   metrics:
@@ -34,7 +40,6 @@ observability:
     enabled: false
     service_name: "expense_management"
     sampling_rate: 1.0
-    jaeger_url: ""
 
   logging:
     level: "debug"

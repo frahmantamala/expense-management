@@ -17,7 +17,6 @@ func TestExpenseRepository(t *testing.T) {
 	RunSpecs(t, "ExpenseRepository Suite")
 }
 
-// SQLiteExpense is a SQLite-compatible model for testing
 type SQLiteExpense struct {
 	ID              int64      `gorm:"primaryKey"`
 	UserID          int64      `gorm:"column:user_id;not null"`
@@ -46,20 +45,18 @@ var _ = Describe("ExpenseRepository", func() {
 
 	BeforeEach(func() {
 		var err error
-		// Use SQLite in-memory database for testing
+
 		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Auto-migrate the schema using SQLite-compatible model
 		err = db.AutoMigrate(&SQLiteExpense{})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create repository instance
 		repo = NewExpenseRepository(db)
 	})
 
 	AfterEach(func() {
-		// Clean up database
+
 		sqlDB, err := db.DB()
 		Expect(err).NotTo(HaveOccurred())
 		err = sqlDB.Close()
@@ -140,7 +137,7 @@ var _ = Describe("ExpenseRepository", func() {
 		})
 
 		It("should update expense successfully", func() {
-			// Update the expense
+
 			createdExpense.Description = "Updated description"
 			createdExpense.AmountIDR = 200000
 			createdExpense.Category = "Food"
@@ -148,7 +145,6 @@ var _ = Describe("ExpenseRepository", func() {
 			err := repo.Update(createdExpense)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Retrieve and verify the update
 			retrieved, err := repo.GetByID(createdExpense.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(retrieved.Description).To(Equal("Updated description"))
@@ -180,7 +176,6 @@ var _ = Describe("ExpenseRepository", func() {
 			err := repo.UpdateStatus(createdExpense.ID, "approved", processedAt)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Retrieve and verify the update
 			retrieved, err := repo.GetByID(createdExpense.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(retrieved.ExpenseStatus).To(Equal("approved"))

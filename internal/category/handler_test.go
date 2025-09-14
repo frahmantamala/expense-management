@@ -36,7 +36,7 @@ var _ = Describe("Category Handler Integration", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = db.AutoMigrate(&category.Category{})
+		err = db.AutoMigrate(&categoryDatamodel.ExpenseCategory{})
 		Expect(err).NotTo(HaveOccurred())
 
 		repo = categoryPostgres.NewCategoryRepository(db)

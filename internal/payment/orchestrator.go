@@ -3,21 +3,22 @@ package payment
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 )
 
-type ExpensePaymentProcessor struct {
+type PaymentOrchestrator struct {
 	paymentService ServiceAPI
 	logger         *slog.Logger
 }
 
-func NewExpensePaymentProcessor(paymentService ServiceAPI, logger *slog.Logger) *ExpensePaymentProcessor {
-	return &ExpensePaymentProcessor{
+func NewPaymentOrchestrator(paymentService ServiceAPI, logger *slog.Logger) *PaymentOrchestrator {
+	return &PaymentOrchestrator{
 		paymentService: paymentService,
 		logger:         logger,
 	}
 }
 
-func (p *ExpensePaymentProcessor) ProcessPayment(expenseID int64, amount int64) (externalID string, err error) {
+func (p *PaymentOrchestrator) ProcessPayment(expenseID int64, amount int64) (externalID string, err error) {
 	externalID = fmt.Sprintf("exp-%d-%d", expenseID, amount)
 
 	p.logger.Info("initiating payment processing",
@@ -27,6 +28,15 @@ func (p *ExpensePaymentProcessor) ProcessPayment(expenseID int64, amount int64) 
 
 	payment, err := p.paymentService.CreatePayment(expenseID, externalID, amount)
 	if err != nil {
+		// check if this is a duplicate external_id error
+		if strings.Contains(err.Error(), "external_id") && strings.Contains(err.Error(), "already exists") {
+			p.logger.Warn("duplicate payment creation attempt detected",
+				"error", err,
+				"expense_id", expenseID,
+				"external_id", externalID)
+			return "", fmt.Errorf("external_id %s already exists", externalID)
+		}
+
 		p.logger.Error("failed to create payment record",
 			"error", err,
 			"expense_id", expenseID)
@@ -63,7 +73,7 @@ func (p *ExpensePaymentProcessor) ProcessPayment(expenseID int64, amount int64) 
 	return externalID, nil
 }
 
-func (p *ExpensePaymentProcessor) RetryPayment(expenseID int64, externalID string) error {
+func (p *PaymentOrchestrator) RetryPayment(expenseID int64, externalID string) error {
 	p.logger.Info("retrying payment",
 		"expense_id", expenseID,
 		"external_id", externalID)
@@ -74,6 +84,12 @@ func (p *ExpensePaymentProcessor) RetryPayment(expenseID int64, externalID strin
 			"error", err,
 			"expense_id", expenseID)
 		return fmt.Errorf("payment record not found: %w", err)
+	}
+
+	if paymentRecord == nil {
+		p.logger.Error("no payment record found for expense retry",
+			"expense_id", expenseID)
+		return fmt.Errorf("no payment record found for expense %d", expenseID)
 	}
 
 	if !CanRetry(paymentRecord) {
@@ -106,13 +122,19 @@ func (p *ExpensePaymentProcessor) RetryPayment(expenseID int64, externalID strin
 	return nil
 }
 
-func (p *ExpensePaymentProcessor) GetPaymentStatus(expenseID int64) (interface{}, error) {
+func (p *PaymentOrchestrator) GetPaymentStatus(expenseID int64) (interface{}, error) {
 	paymentRecord, err := p.paymentService.GetPaymentByExpenseID(expenseID)
 	if err != nil {
 		p.logger.Error("failed to get payment for expense",
 			"error", err,
 			"expense_id", expenseID)
 		return nil, fmt.Errorf("failed to get payment status: %w", err)
+	}
+
+	if paymentRecord == nil {
+		p.logger.Warn("no payment record found for expense",
+			"expense_id", expenseID)
+		return nil, fmt.Errorf("no payment record found for expense %d", expenseID)
 	}
 
 	return ToView(paymentRecord), nil

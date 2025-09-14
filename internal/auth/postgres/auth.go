@@ -36,7 +36,6 @@ func (r *Repository) GetPasswordForUsername(email string) (string, string, error
 func (r *Repository) GetUserWithPermissions(userID int64) (*auth.User, error) {
 	var user auth.User
 
-	// Get user basic info - only the fields available in auth.User
 	query := `SELECT id, email FROM users WHERE id = ? AND is_active = true`
 
 	row := r.db.Raw(query, userID).Row()
@@ -47,7 +46,6 @@ func (r *Repository) GetUserWithPermissions(userID int64) (*auth.User, error) {
 		return nil, err
 	}
 
-	// Get user permissions
 	permQuery := `SELECT p.name 
 	             FROM permissions p 
 	             JOIN user_permissions up ON p.id = up.permission_id 

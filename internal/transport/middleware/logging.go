@@ -29,28 +29,22 @@ var sensitiveFields = []string{
 	"auth",
 }
 
-// LoggingMiddleware creates a middleware that logs requests and responses with sensitive data filtering
 func LoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			// Get request ID from context if available
 			reqID := middleware.GetReqID(r.Context())
 
-			// Log incoming request
 			logRequest(logger, r, reqID)
 
-			// Wrap response writer to capture response data
 			ww := &responseWriter{
 				ResponseWriter: w,
 				body:           &bytes.Buffer{},
 			}
 
-			// Process request
 			next.ServeHTTP(ww, r)
 
-			// Log response
 			duration := time.Since(start)
 			logResponse(logger, ww, duration, reqID)
 		})
@@ -70,24 +64,20 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func (rw *responseWriter) Write(b []byte) (int, error) {
-	// Write to both the actual response and our buffer
 	rw.body.Write(b)
 	return rw.ResponseWriter.Write(b)
 }
 
 // logRequest logs the incoming HTTP request with sensitive data filtered
 func logRequest(logger *slog.Logger, r *http.Request, reqID string) {
-	// Read and restore request body
 	var bodyBytes []byte
 	if r.Body != nil {
 		bodyBytes, _ = io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
-	// Filter sensitive data from headers
 	headers := filterSensitiveHeaders(r.Header)
 
-	// Filter sensitive data from body
 	filteredBody := filterSensitiveBody(bodyBytes)
 
 	logger.Info("incoming request",
@@ -102,17 +92,14 @@ func logRequest(logger *slog.Logger, r *http.Request, reqID string) {
 	)
 }
 
-// logResponse logs the HTTP response with sensitive data filtered
 func logResponse(logger *slog.Logger, rw *responseWriter, duration time.Duration, reqID string) {
 	statusCode := rw.statusCode
 	if statusCode == 0 {
-		statusCode = 200 // Default if WriteHeader wasn't called
+		statusCode = 200
 	}
 
-	// Filter sensitive data from response body
 	filteredBody := filterSensitiveBody(rw.body.Bytes())
 
-	// Determine log level based on status code
 	logLevel := slog.LevelInfo
 	if statusCode >= 400 && statusCode < 500 {
 		logLevel = slog.LevelWarn

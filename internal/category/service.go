@@ -47,7 +47,6 @@ func (s *Service) GetAllCategories() ([]CategoryResponse, error) {
 }
 
 func (s *Service) GetCategoryByName(name string) (*CategoryResponse, error) {
-	// First get all categories and find by name (since we don't have GetByName in RepositoryAPI)
 	dataCategories, err := s.repo.GetAll()
 	if err != nil {
 		s.logger.Error("failed to get categories from repository", "error", err)

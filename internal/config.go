@@ -44,8 +44,13 @@ type SecurityConfig struct {
 }
 
 type PaymentConfig struct {
-	MockAPIURL string `mapstructure:"mock_api_url" validate:"required,url"`
-	APIKey     string `mapstructure:"api_key"`
+	MockAPIURL     string        `mapstructure:"mock_api_url" validate:"required,url"`
+	APIKey         string        `mapstructure:"api_key"`
+	PaymentTimeout time.Duration `mapstructure:"payment_timeout" validate:"required,min=1s"`
+	WebhookURL     string        `mapstructure:"webhook_url" validate:"omitempty,url"`
+	MaxWorkers     int           `mapstructure:"max_workers" validate:"min=1,max=100"`
+	JobQueueSize   int           `mapstructure:"job_queue_size" validate:"min=10,max=10000"`
+	WorkerPoolSize int           `mapstructure:"worker_pool_size" validate:"min=1,max=100"`
 }
 
 type ObservabilityConfig struct {
@@ -96,8 +101,6 @@ func getEnvAsDuration(key string, defaultVal time.Duration) time.Duration {
 	return defaultVal
 }
 
-// LoadConfigFromEnv loads configuration from environment variables
-// This is used for Docker deployment where env vars override config file
 func LoadConfigFromEnv() *Config {
 	return &Config{
 		Server: ServerConfig{
@@ -123,8 +126,12 @@ func LoadConfigFromEnv() *Config {
 			SessionSecret:        getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production"),
 		},
 		Payment: PaymentConfig{
-			MockAPIURL: getEnv("PAYMENT_MOCK_API_URL", "https://650cfcbc47af3fd22f6818ca.mockapi.io/test/v1"),
-			APIKey:     getEnv("PAYMENT_API_KEY", ""),
+			MockAPIURL:     getEnv("PAYMENT_MOCK_API_URL", "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io"),
+			APIKey:         getEnv("PAYMENT_API_KEY", "mock-postman-api-key"),
+			WebhookURL:     getEnv("PAYMENT_WEBHOOK_URL", "http://localhost:8080/webhooks/payment/callback"),
+			MaxWorkers:     getEnvAsInt("PAYMENT_MAX_WORKERS", 10),
+			JobQueueSize:   getEnvAsInt("PAYMENT_JOB_QUEUE_SIZE", 100),
+			WorkerPoolSize: getEnvAsInt("PAYMENT_WORKER_POOL_SIZE", 10),
 		},
 		Observability: ObservabilityConfig{
 			Logging: LoggingConfig{
@@ -145,7 +152,6 @@ func LoadConfigFromEnv() *Config {
 	}
 }
 
-// buildDSNFromEnv builds PostgreSQL connection string from environment variables
 func buildDSNFromEnv() string {
 	host := getEnv("DB_HOST", "localhost")
 	port := getEnv("DB_PORT", "5432")

@@ -9,11 +9,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/frahmantamala/expense-management/internal/auth"
 	expenseDatamodel "github.com/frahmantamala/expense-management/internal/core/datamodel/expense"
+	"github.com/frahmantamala/expense-management/internal/core/events"
 	"github.com/frahmantamala/expense-management/internal/expense"
 )
 
-// Mock repository for testing
 type mockExpenseRepository struct {
 	expenses       map[int64]*expenseDatamodel.Expense
 	expensesByUser map[int64][]*expenseDatamodel.Expense
@@ -43,10 +44,8 @@ func (m *mockExpenseRepository) Create(exp *expenseDatamodel.Expense) error {
 	exp.UpdatedAt = time.Now()
 	m.expenses[exp.ID] = exp
 
-	// Add to user expenses
 	m.expensesByUser[exp.UserID] = append(m.expensesByUser[exp.UserID], exp)
 
-	// Add to all expenses
 	m.allExpenses = append(m.allExpenses, exp)
 
 	return nil
@@ -72,22 +71,18 @@ func (m *mockExpenseRepository) GetByUserID(userID int64, params *expense.Expens
 		return []*expenseDatamodel.Expense{}, nil
 	}
 
-	// Apply basic filtering for mock
 	filtered := []*expenseDatamodel.Expense{}
 	for _, exp := range expenses {
 		include := true
 
-		// Category filter
 		if params.CategoryID != "" && exp.Category != params.CategoryID {
 			include = false
 		}
 
-		// Status filter
 		if params.Status != "" && exp.ExpenseStatus != params.Status {
 			include = false
 		}
 
-		// Search filter (simple contains check)
 		if params.Search != "" {
 			if !contains(exp.Description, params.Search) && !contains(exp.Category, params.Search) {
 				include = false
@@ -99,7 +94,6 @@ func (m *mockExpenseRepository) GetByUserID(userID int64, params *expense.Expens
 		}
 	}
 
-	// Simple pagination
 	start := params.GetOffset()
 	end := start + params.PerPage
 	if start >= len(filtered) {
@@ -117,22 +111,18 @@ func (m *mockExpenseRepository) GetAllExpenses(params *expense.ExpenseQueryParam
 		return nil, m.getError
 	}
 
-	// Apply basic filtering for mock
 	filtered := []*expenseDatamodel.Expense{}
 	for _, exp := range m.allExpenses {
 		include := true
 
-		// Category filter
 		if params.CategoryID != "" && exp.Category != params.CategoryID {
 			include = false
 		}
 
-		// Status filter
 		if params.Status != "" && exp.ExpenseStatus != params.Status {
 			include = false
 		}
 
-		// Search filter (simple contains check)
 		if params.Search != "" {
 			if !contains(exp.Description, params.Search) && !contains(exp.Category, params.Search) {
 				include = false
@@ -144,7 +134,6 @@ func (m *mockExpenseRepository) GetAllExpenses(params *expense.ExpenseQueryParam
 		}
 	}
 
-	// Simple pagination
 	start := params.GetOffset()
 	end := start + params.PerPage
 	if start >= len(filtered) {
@@ -155,7 +144,7 @@ func (m *mockExpenseRepository) GetAllExpenses(params *expense.ExpenseQueryParam
 	}
 
 	return filtered[start:end], nil
-} // Helper function for simple string contains check
+}
 func contains(str, substr string) bool {
 	return len(str) >= len(substr) && (str == substr ||
 		(len(substr) > 0 && len(str) > 0 &&
@@ -190,7 +179,6 @@ func (m *mockExpenseRepository) Update(exp *expenseDatamodel.Expense) error {
 	return nil
 }
 
-// Legacy method for backward compatibility - should not be used in new code
 func (m *mockExpenseRepository) UpdateStatus(id int64, status string, processedAt time.Time) error {
 	if exp, exists := m.expenses[id]; exists {
 		exp.ExpenseStatus = status
@@ -200,7 +188,72 @@ func (m *mockExpenseRepository) UpdateStatus(id int64, status string, processedA
 	return nil
 }
 
-// Mock payment processor for testing
+func (m *mockExpenseRepository) CountByUserID(userID int64, params *expense.ExpenseQueryParams) (int64, error) {
+	if m.getError != nil {
+		return 0, m.getError
+	}
+	expenses := m.expensesByUser[userID]
+	if expenses == nil {
+		return 0, nil
+	}
+
+	count := int64(0)
+	for _, exp := range expenses {
+		include := true
+
+		if params.CategoryID != "" && exp.Category != params.CategoryID {
+			include = false
+		}
+
+		if params.Status != "" && exp.ExpenseStatus != params.Status {
+			include = false
+		}
+
+		if params.Search != "" {
+			if !contains(exp.Description, params.Search) && !contains(exp.Category, params.Search) {
+				include = false
+			}
+		}
+
+		if include {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+func (m *mockExpenseRepository) CountAllExpenses(params *expense.ExpenseQueryParams) (int64, error) {
+	if m.getError != nil {
+		return 0, m.getError
+	}
+
+	count := int64(0)
+	for _, exp := range m.allExpenses {
+		include := true
+
+		if params.CategoryID != "" && exp.Category != params.CategoryID {
+			include = false
+		}
+
+		if params.Status != "" && exp.ExpenseStatus != params.Status {
+			include = false
+		}
+
+		if params.Search != "" {
+			if !contains(exp.Description, params.Search) && !contains(exp.Category, params.Search) {
+				include = false
+			}
+		}
+
+		if include {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
 type mockPaymentProcessor struct {
 	processPaymentError   error
 	retryPaymentError     error
@@ -246,25 +299,25 @@ var _ = Describe("ExpenseService", func() {
 		mockRepo = newMockExpenseRepository()
 		mockProcessor = newMockPaymentProcessor()
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-		expenseService = expense.NewService(mockRepo, mockProcessor, logger)
+		eventBus := events.NewEventBus(logger)
+		permissionChecker := auth.NewPermissionChecker()
+		expenseService = expense.NewService(mockRepo, mockProcessor, permissionChecker, eventBus, logger)
 	})
 
 	Describe("CreateExpense", func() {
 		Context("when creating a small expense (auto-approved)", func() {
 			It("should create and approve the expense automatically", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
-					AmountIDR:   25000, // Small amount for auto-approval
+					AmountIDR:   25000,
 					Description: "Test expense",
 					Category:    "food",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result).ToNot(BeNil())
 				Expect(result.UserID).To(Equal(userID))
@@ -276,7 +329,7 @@ var _ = Describe("ExpenseService", func() {
 			})
 
 			It("should trigger payment processing for auto-approved expense", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
 					AmountIDR:   25000,
@@ -285,31 +338,27 @@ var _ = Describe("ExpenseService", func() {
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.ExpenseStatus).To(Equal(expense.ExpenseStatusApproved))
-				// Payment should have been processed (verified by no errors)
+
 			})
 		})
 
 		Context("when creating a large expense (requires approval)", func() {
 			It("should create expense with pending approval status", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
-					AmountIDR:   5000000, // Large amount requiring approval (5M > 1M threshold)
+					AmountIDR:   5000000,
 					Description: "Large expense",
 					Category:    "transport",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result).ToNot(BeNil())
 				Expect(result.ExpenseStatus).To(Equal(expense.ExpenseStatusPendingApproval))
@@ -319,76 +368,68 @@ var _ = Describe("ExpenseService", func() {
 
 		Context("when validation fails", func() {
 			It("should return validation error for empty description", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
 					AmountIDR:   25000,
-					Description: "", // Empty description
+					Description: "",
 					Category:    "food",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("description"))
 				Expect(result).To(BeNil())
 			})
 
 			It("should return validation error for zero amount", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
-					AmountIDR:   0, // Zero amount
+					AmountIDR:   0,
 					Description: "Test expense",
 					Category:    "food",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("amount must be positive"))
 				Expect(result).To(BeNil())
 			})
 
 			It("should return validation error for amount below minimum", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
-					AmountIDR:   5000, // Below minimum 10,000 IDR
+					AmountIDR:   5000,
 					Description: "Test expense",
 					Category:    "food",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("amount must be at least 10,000 IDR"))
 				Expect(result).To(BeNil())
 			})
 
 			It("should return validation error for amount above maximum", func() {
-				// Given
+
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
-					AmountIDR:   60000000, // Above maximum 50,000,000 IDR
+					AmountIDR:   60000000,
 					Description: "Test expense",
 					Category:    "food",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("amount must not exceed 50,000,000 IDR"))
 				Expect(result).To(BeNil())
@@ -397,7 +438,7 @@ var _ = Describe("ExpenseService", func() {
 
 		Context("when repository fails", func() {
 			It("should return repository error", func() {
-				// Given
+
 				mockRepo.createError = errors.New("database error")
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
@@ -407,10 +448,8 @@ var _ = Describe("ExpenseService", func() {
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("database error"))
 				Expect(result).To(BeNil())
@@ -419,24 +458,22 @@ var _ = Describe("ExpenseService", func() {
 
 		Context("when payment processing fails", func() {
 			It("should still create the expense but log payment error", func() {
-				// Given
+
 				mockProcessor.processPaymentError = errors.New("payment gateway error")
 				userID := int64(123)
 				dto := expense.CreateExpenseDTO{
-					AmountIDR:   25000, // Auto-approved amount
+					AmountIDR:   25000,
 					Description: "Test expense",
 					Category:    "food",
 					ExpenseDate: time.Now(),
 				}
 
-				// When
 				result, err := expenseService.CreateExpense(&dto, userID)
 
-				// Then
-				Expect(err).ToNot(HaveOccurred()) // Expense creation should succeed
+				Expect(err).ToNot(HaveOccurred())
 				Expect(result).ToNot(BeNil())
 				Expect(result.ExpenseStatus).To(Equal(expense.ExpenseStatusApproved))
-				// Payment failure should be logged but not prevent expense creation
+
 			})
 		})
 	})
@@ -444,7 +481,7 @@ var _ = Describe("ExpenseService", func() {
 	Describe("ApproveExpense", func() {
 		Context("when approving a pending expense", func() {
 			It("should approve the expense and trigger payment", func() {
-				// Given - Create a pending expense first
+
 				testExpense := &expense.Expense{
 					ID:            1,
 					UserID:        123,
@@ -456,15 +493,12 @@ var _ = Describe("ExpenseService", func() {
 				}
 				mockRepo.expenses[1] = expense.ToDataModel(testExpense)
 				managerID := int64(456)
-				permissions := []string{"approve_expenses"} // Use correct permission string
+				permissions := []string{"approve_expenses"}
 
-				// When
 				err := expenseService.ApproveExpense(1, managerID, permissions)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 
-				// Verify expense was updated to approved
 				updatedExpense, _ := mockRepo.GetByID(1)
 				Expect(updatedExpense.ExpenseStatus).To(Equal(expense.ExpenseStatusApproved))
 			})
@@ -472,15 +506,13 @@ var _ = Describe("ExpenseService", func() {
 
 		Context("when expense does not exist", func() {
 			It("should return not found error", func() {
-				// Given
+
 				expenseID := int64(999)
 				managerID := int64(456)
-				permissions := []string{"approve_expenses"} // Use correct permission string
+				permissions := []string{"approve_expenses"}
 
-				// When
 				err := expenseService.ApproveExpense(expenseID, managerID, permissions)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("not found"))
 			})
@@ -488,7 +520,7 @@ var _ = Describe("ExpenseService", func() {
 
 		Context("when expense is already approved", func() {
 			It("should return already approved error", func() {
-				// Given - Create an already approved expense
+
 				testExpense := &expense.Expense{
 					ID:            1,
 					UserID:        123,
@@ -499,12 +531,10 @@ var _ = Describe("ExpenseService", func() {
 				}
 				mockRepo.expenses[1] = expense.ToDataModel(testExpense)
 				managerID := int64(456)
-				permissions := []string{"approve_expenses"} // Use correct permission string
+				permissions := []string{"approve_expenses"}
 
-				// When
 				err := expenseService.ApproveExpense(1, managerID, permissions)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid expense status"))
 			})
@@ -514,7 +544,7 @@ var _ = Describe("ExpenseService", func() {
 	Describe("RejectExpense", func() {
 		Context("when rejecting a pending expense", func() {
 			It("should reject the expense successfully", func() {
-				// Given
+
 				testExpense := &expense.Expense{
 					ID:            1,
 					UserID:        123,
@@ -526,15 +556,12 @@ var _ = Describe("ExpenseService", func() {
 				mockRepo.expenses[1] = expense.ToDataModel(testExpense)
 				managerID := int64(456)
 				reason := "Insufficient documentation"
-				permissions := []string{"reject_expenses"} // Use correct permission string
+				permissions := []string{"reject_expenses"}
 
-				// When
 				err := expenseService.RejectExpense(1, managerID, reason, permissions)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 
-				// Verify expense was updated to rejected
 				updatedExpense, _ := mockRepo.GetByID(1)
 				Expect(updatedExpense.ExpenseStatus).To(Equal(expense.ExpenseStatusRejected))
 			})
@@ -544,7 +571,7 @@ var _ = Describe("ExpenseService", func() {
 	Describe("GetAllExpenses", func() {
 		Context("when there are expenses", func() {
 			It("should return all expenses", func() {
-				// Given
+
 				expense1 := &expense.Expense{
 					ID:            1,
 					UserID:        123,
@@ -562,14 +589,12 @@ var _ = Describe("ExpenseService", func() {
 					expense.ToDataModel(expense2),
 				}
 
-				// When
 				params := &expense.ExpenseQueryParams{
 					PerPage: 10,
 					Page:    1,
 				}
 				result, err := expenseService.GetAllExpenses(params)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result).To(HaveLen(2))
 				Expect(result[0].ID).To(Equal(int64(1)))
@@ -581,7 +606,7 @@ var _ = Describe("ExpenseService", func() {
 	Describe("RetryPayment", func() {
 		Context("when retrying payment for an approved expense", func() {
 			It("should call payment processor retry", func() {
-				// Given
+
 				expenseID := int64(123)
 				testExpense := &expense.Expense{
 					ID:            123,
@@ -592,26 +617,22 @@ var _ = Describe("ExpenseService", func() {
 					UpdatedAt:     time.Now(),
 				}
 				mockRepo.expenses[123] = expense.ToDataModel(testExpense)
-				permissions := []string{"retry_payments"} // Use correct permission for payment retry
+				permissions := []string{"retry_payments"}
 
-				// When
 				err := expenseService.RetryPayment(expenseID, permissions)
 
-				// Then
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 
 		Context("when user lacks permission", func() {
 			It("should return permission error", func() {
-				// Given
+
 				expenseID := int64(123)
 				permissions := []string{"some:other:permission"}
 
-				// When
 				err := expenseService.RetryPayment(expenseID, permissions)
 
-				// Then
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("unauthorized"))
 			})

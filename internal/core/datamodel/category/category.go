@@ -10,3 +10,7 @@ type ExpenseCategory struct {
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 }
+
+func (ExpenseCategory) TableName() string {
+	return "expense_categories"
+}

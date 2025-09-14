@@ -7,23 +7,19 @@ import (
 	errors "github.com/frahmantamala/expense-management/internal"
 )
 
-// ValidatorFunc represents a validation function
 type ValidatorFunc func(interface{}) *errors.AppError
 
-// FieldValidator represents validation for a specific field
 type FieldValidator struct {
 	FieldName  string
 	Value      interface{}
 	Validators []ValidatorFunc
 }
 
-// ValidationBuilder helps build validation rules
 type ValidationBuilder struct {
 	fields []FieldValidator
 	errors []errors.ValidationError
 }
 
-// NewValidator creates a new validation builder
 func NewValidator() *ValidationBuilder {
 	return &ValidationBuilder{
 		fields: make([]FieldValidator, 0),
@@ -31,7 +27,6 @@ func NewValidator() *ValidationBuilder {
 	}
 }
 
-// Field adds a field for validation
 func (v *ValidationBuilder) Field(name string, value interface{}) *FieldValidator {
 	fv := FieldValidator{
 		FieldName:  name,
@@ -42,7 +37,6 @@ func (v *ValidationBuilder) Field(name string, value interface{}) *FieldValidato
 	return &v.fields[len(v.fields)-1]
 }
 
-// Required validates that a field is not empty
 func (fv *FieldValidator) Required() *FieldValidator {
 	fv.Validators = append(fv.Validators, func(value interface{}) *errors.AppError {
 		switch v := value.(type) {
@@ -52,7 +46,7 @@ func (fv *FieldValidator) Required() *FieldValidator {
 			}
 		case int64:
 			if v == 0 {
-				// Special case for amount field
+
 				if fv.FieldName == "amount_idr" {
 					return errors.NewValidationFieldError(fv.FieldName, "amount must be positive", errors.ErrCodeValidationFailed)
 				}
@@ -68,13 +62,12 @@ func (fv *FieldValidator) Required() *FieldValidator {
 	return fv
 }
 
-// MinInt validates minimum integer value
 func (fv *FieldValidator) MinInt(min int64, code errors.ErrorCode) *FieldValidator {
 	fv.Validators = append(fv.Validators, func(value interface{}) *errors.AppError {
 		if v, ok := value.(int64); ok {
 			if v < min {
 				var message string
-				// Special cases for amount validation
+
 				if fv.FieldName == "amount_idr" {
 					if min == 10000 {
 						message = "amount must be at least 10,000 IDR"
@@ -92,13 +85,12 @@ func (fv *FieldValidator) MinInt(min int64, code errors.ErrorCode) *FieldValidat
 	return fv
 }
 
-// MaxInt validates maximum integer value
 func (fv *FieldValidator) MaxInt(max int64, code errors.ErrorCode) *FieldValidator {
 	fv.Validators = append(fv.Validators, func(value interface{}) *errors.AppError {
 		if v, ok := value.(int64); ok {
 			if v > max {
 				var message string
-				// Special case for amount validation
+
 				if fv.FieldName == "amount_idr" && max == 50000000 {
 					message = "amount must not exceed 50,000,000 IDR"
 				} else {
@@ -112,7 +104,6 @@ func (fv *FieldValidator) MaxInt(max int64, code errors.ErrorCode) *FieldValidat
 	return fv
 }
 
-// MinLength validates minimum string length
 func (fv *FieldValidator) MinLength(min int) *FieldValidator {
 	fv.Validators = append(fv.Validators, func(value interface{}) *errors.AppError {
 		if v, ok := value.(string); ok {
@@ -126,7 +117,6 @@ func (fv *FieldValidator) MinLength(min int) *FieldValidator {
 	return fv
 }
 
-// MaxLength validates maximum string length
 func (fv *FieldValidator) MaxLength(max int) *FieldValidator {
 	fv.Validators = append(fv.Validators, func(value interface{}) *errors.AppError {
 		if v, ok := value.(string); ok {
@@ -140,7 +130,6 @@ func (fv *FieldValidator) MaxLength(max int) *FieldValidator {
 	return fv
 }
 
-// NotFuture validates that a date is not in the future
 func (fv *FieldValidator) NotFuture() *FieldValidator {
 	fv.Validators = append(fv.Validators, func(value interface{}) *errors.AppError {
 		if v, ok := value.(time.Time); ok {
@@ -154,13 +143,11 @@ func (fv *FieldValidator) NotFuture() *FieldValidator {
 	return fv
 }
 
-// Custom validates using a custom function
 func (fv *FieldValidator) Custom(validator func(interface{}) *errors.AppError) *FieldValidator {
 	fv.Validators = append(fv.Validators, validator)
 	return fv
 }
 
-// Validate runs all validations and returns consolidated errors
 func (v *ValidationBuilder) Validate() *errors.AppError {
 	var validationErrors []errors.ValidationError
 
@@ -168,12 +155,12 @@ func (v *ValidationBuilder) Validate() *errors.AppError {
 		for _, validator := range field.Validators {
 			if err := validator(field.Value); err != nil {
 				if appErr, ok := errors.IsAppError(err); ok {
-					// Check if the AppError already has validation details
+
 					if appErr.Details != nil {
 						if details, ok := appErr.Details.(errors.ValidationErrors); ok {
 							validationErrors = append(validationErrors, details.Errors...)
 						} else {
-							// Convert AppError to ValidationError
+
 							validationError := errors.ValidationError{
 								Field:   field.FieldName,
 								Message: appErr.Message,
@@ -182,7 +169,7 @@ func (v *ValidationBuilder) Validate() *errors.AppError {
 							validationErrors = append(validationErrors, validationError)
 						}
 					} else {
-						// Convert AppError to ValidationError
+
 						validationError := errors.ValidationError{
 							Field:   field.FieldName,
 							Message: appErr.Message,
@@ -203,7 +190,6 @@ func (v *ValidationBuilder) Validate() *errors.AppError {
 	return nil
 }
 
-// Expense-specific validation helpers
 func ValidateExpenseAmount(amount int64) *errors.AppError {
 	validator := NewValidator()
 	validator.Field("amount_idr", amount).

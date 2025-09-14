@@ -19,7 +19,6 @@ func TestCategoryPostgres(t *testing.T) {
 	RunSpecs(t, "Category Postgres Suite")
 }
 
-// SQLiteCategory is a SQLite-compatible model for testing
 type SQLiteCategory struct {
 	ID          int64     `gorm:"primaryKey"`
 	Name        string    `gorm:"column:name;uniqueIndex;not null"`
@@ -30,7 +29,7 @@ type SQLiteCategory struct {
 }
 
 func (SQLiteCategory) TableName() string {
-	return "categories"
+	return "expense_categories"
 }
 
 var _ = Describe("Category PostgreSQL Repository", func() {
@@ -41,13 +40,11 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 
 	BeforeEach(func() {
 		var err error
-		// Use SQLite in-memory database for testing
 		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Silent),
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create the table using SQLite-compatible model
 		err = db.AutoMigrate(&SQLiteCategory{})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -109,16 +106,14 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			// Create inactive category separately and update it
 			inactiveCategory := &categoryDatamodel.ExpenseCategory{
 				Name:        "kantor",
 				Description: "Office supplies",
-				IsActive:    true, // Create as active first
+				IsActive:    true,
 			}
 			err := repo.Create(inactiveCategory)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Then update to inactive
 			inactiveCategory.IsActive = false
 			err = repo.Update(inactiveCategory)
 			Expect(err).NotTo(HaveOccurred())
@@ -129,7 +124,6 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(categories).To(HaveLen(3))
 
-			// Should be ordered by name ASC
 			Expect(categories[0].Name).To(Equal("kantor"))
 			Expect(categories[1].Name).To(Equal("makan"))
 			Expect(categories[2].Name).To(Equal("perjalanan"))
@@ -209,7 +203,6 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			err := repo.Update(testCategory)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify the update
 			result, err := repo.GetByName("makan")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Description).To(Equal("Updated description"))
@@ -218,7 +211,7 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 
 		It("should update the updated_at timestamp", func() {
 			originalUpdatedAt := testCategory.UpdatedAt
-			time.Sleep(10 * time.Millisecond) // Ensure timestamp difference
+			time.Sleep(10 * time.Millisecond)
 
 			testCategory.Description = "New description"
 			err := repo.Update(testCategory)
@@ -247,7 +240,6 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			err := repo.Delete(testCategory.ID)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Category should still exist but be inactive
 			result, err := repo.GetByName("makan")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
@@ -258,7 +250,6 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			err := repo.Delete(999)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Original category should remain unchanged
 			result, err := repo.GetByName("makan")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.IsActive).To(BeTrue())
@@ -288,7 +279,6 @@ var _ = Describe("Category PostgreSQL Repository", func() {
 			cat := &categoryDatamodel.ExpenseCategory{
 				Name:        "test",
 				Description: "Test category",
-				// IsActive not set, should default to true
 			}
 			err := repo.Create(cat)
 			Expect(err).NotTo(HaveOccurred())

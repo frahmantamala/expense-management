@@ -78,10 +78,12 @@ make test-postgres      # Repository tests
 - **Categories**:(perjalanan, makan, kantor, pemasaran, etc)
 
 ### Payment Processing
-- Automate payment initiation after approval
-- External payment gateway integration with retry capability
-- Payment status tracking (pending → success/failed)
-- Failed payments can be retried by authorized users
+- **Event-driven payment initiation**: Payments triggered by ExpenseApprovedEvent
+- **Async processing**: Payment API calls happen in background
+- **Automatic status updates**: PaymentCompletedEvent updates expense status to "completed"
+- **External payment gateway integration** with retry capability
+- **Payment status tracking** (pending → processing → success/failed)
+- **Failed payments can be retried** by authorized users 
 
 ### Permission System
 - **User**: Submit and view own expenses
@@ -89,11 +91,35 @@ make test-postgres      # Repository tests
 - **Admin**: Full system access
 
 ## API Examples
-provide in swagger
-http://localhost:8080/swagger/index.html
+API doc available in Swagger:
+**http://localhost:8080/swagger/index.html**
+
+### Key API Features
+- **Pagination with total count**: All list endpoints include `total_data` for frontend pagination
+- **Advanced filtering**: Search, category, status, and sorting options
+- **Event-driven responses**: Operations return immediately while processing continues async
 
 ## Architecture
-This app following approach domain driven which each module isolate in his own domain.
+This app following approach domain driven where each module isolate in his own domain
+
+**Why Event Bus?**
+- **Decoupling**: Services communicate through events rather than direct calls, avoid tight coupling
+- **Scalability**: Async processing prevents blocking operations from affecting user experience
+- **Reliability**: Event-driven approach handles failures gracefully with potential for retry mechanisms
+
+**Event Flow**:
+```
+1. Expense Created/Approved → ExpenseApprovedEvent
+2. Payment Service processes event async
+3. Payment Completed → PaymentCompletedEvent  
+4. Expense Service updates status to "completed"
+```
+
+**Benefits**:
+- HTTP requests return immediately
+- Payment processing happens in background
+- Failed payments don't affect expense creation/approval
+- Natural separation of payment and expense concerns
 
 ### Directory Structure
 ```
@@ -103,22 +129,43 @@ This app following approach domain driven which each module isolate in his own d
 │   ├── expense/           # Core expense business logic
 │   ├── payment/           # Payment processing
 │   ├── user/              # User management
+│   ├── core/
+│   │   ├── events/        # Event bus & event definitions
+│   │   └── datamodel/     # Shared data models
 │   └── transport/         # HTTP layer & middleware
 ├── db/migrations/         # Database migrations
 └── api/                   # OpenAPI specification
 ```
 
+### Event System Components
+
+**Event Bus** (`internal/core/events/bus.go`):
+- In-memory event publisher/subscriber
+- Goroutine-based async event processing
+- Error handling and logging for event failures
+
+**Event Types** (`internal/core/events/payment_events.go`):
+- `ExpenseApprovedEvent`: Triggered when expense needs payment processing
+- `PaymentCompletedEvent`: Triggered when payment gateway confirms success
+
+**Event Handlers**:
+- Expense Service: Handles payment completion to update expense status
+- Payment Service: Handles expense approval to initiate payments
+
 ### Key Design Decisions
+
+**Event-Driven Payment Processing**: 
+- Prevents blocking HTTP requests during payment API calls
+- Enables payment retries without affecting expense approval workflow
+- Separates payment concerns from expense management
 
 **Layered Architecture**: Handler => Service => Repository pattern for clear separation of concerns and testability.
 
-**Permission Middleware**: middleware and service-level permission checks.
+**Permission Middleware**: Middleware and service-level permission checks with RBAC.
 
-**Async Payment Processing**: Payment operations run in background goroutines to avoid blocking HTTP requests.
+**Async Background Processing**: payments run asynchronously
 
-**Configuration-Driven**: All external dependencies (database, payment API, security settings) are externalized to config files.
 
-**OpenAPI-First**: API specification drives code generation and documentation.
 
 ## Database Schema
 
