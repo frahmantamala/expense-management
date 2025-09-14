@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
     container_name: expense_management_db
@@ -24,7 +23,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Go Application
   app:
     build:
       context: .
@@ -32,23 +30,27 @@ services:
     container_name: expense_management_app
     restart: always
     environment:
-      # Database configuration
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: expense_management
-      DB_SSLMODE: disable
-      
-      # Application configuration
-      APP_PORT: 8080
-      APP_ENV: production
-      
-      # JWT Configuration
-      JWT_SECRET: your-super-secret-jwt-key-change-in-production
-      JWT_EXPIRY: 24h
-      
-      LOG_LEVEL: info
+      DB_SOURCE: "postgresql://postgres:postgres@postgres:5432/expense_management?sslmode=disable"
+
+      SESSION_SECRET: "jwt-secret-key"
+      BCRYPT_COST: 12
+
+      PAYMENT_MOCK_API_URL: "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io/v1"
+      PAYMENT_API_KEY: "your-api-key-here"
+      PAYMENT_TIMEOUT: 10s
+      PAYMENT_WEBHOOK_URL: "http://localhost:8081/api/v1/payment/callback"
+      PAYMENT_MAX_WORKERS: 10
+      PAYMENT_JOB_QUEUE_SIZE: 100
+      PAYMENT_WORKER_POOL_SIZE: 10
+
+      LOG_LEVEL: debug
+      LOG_FORMAT: text
+
+      METRICS_ENABLED: true
+      METRICS_PATH: /metrics
+      TRACING_ENABLED: false
+      TRACING_SERVICE_NAME: expense_management
+      TRACING_SAMPLING_RATE: 1.0
       
     ports:
       - "8081:8080"
