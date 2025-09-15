@@ -45,7 +45,7 @@ services:
       PAYMENT_MOCK_API_URL: "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io/v1"
       PAYMENT_API_KEY: "your-api-key-here"
       PAYMENT_TIMEOUT: 20s
-      PAYMENT_WEBHOOK_URL: "http://localhost:8081/api/v1/payment/callback"
+      PAYMENT_WEBHOOK_URL: "http://host.docker.internal:8081/api/v1/payment/callback"
       PAYMENT_MAX_WORKERS: 10
       PAYMENT_JOB_QUEUE_SIZE: 100
       PAYMENT_WORKER_POOL_SIZE: 10
