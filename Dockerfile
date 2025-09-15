@@ -22,8 +22,6 @@ WORKDIR /root/
 
 COPY --from=builder /app/main .
 
-COPY --from=builder /app/config.example.yml ./config.yml
-
 COPY --from=builder /app/db ./db
 
 COPY --from=builder /app/api ./api

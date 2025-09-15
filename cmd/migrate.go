@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"log"
+	"os"
+
+	"github.com/frahmantamala/expense-management/internal"
 
 	"github.com/pressly/goose/v3"
 	"github.com/spf13/cobra"
@@ -25,9 +28,21 @@ func init() {
 
 func runMigration(_ *cobra.Command, _ []string) error {
 	ctx := context.Background()
-	cfg, err := loadConfig(".")
-	if err != nil {
-		log.Fatal(err)
+
+	var cfg *internal.Config
+	var err error
+
+	if dbSource := os.Getenv("DB_SOURCE"); dbSource != "" {
+		cfg = internal.LoadConfigFromEnv()
+	} else {
+		cfg, err = loadConfig(".")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("config validation failed: %v", err)
 	}
 
 	db, err := goose.OpenDBWithDriver("pgx", cfg.Database.Source)

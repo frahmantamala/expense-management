@@ -110,7 +110,6 @@ func startHTTPServer() {
 }
 
 func setupRoutes(deps *Dependencies) {
-
 	authRepo := authPostgres.NewRepository(deps.DB)
 	tokenGen := auth.NewJWTTokenGenerator(
 		deps.Config.Security.SessionSecret,
@@ -174,10 +173,32 @@ func setupRoutes(deps *Dependencies) {
 }
 
 func initializeDependencies() (*Dependencies, error) {
-	config, err := loadConfig(".")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+	var config *internal.Config
+	var err error
+
+	if isContainerEnvironment() {
+		slog.Info("Loading configuration from environment variables")
+		config = internal.LoadConfigFromEnv()
+
+		if config != nil && config.Database.Source != "" {
+			slog.Debug("Database configuration loaded", "has_source", true)
+		} else {
+			slog.Warn("Database configuration loaded but source is empty")
+		}
+	} else {
+		slog.Info("Loading configuration from file")
+		config, err = loadConfig(".")
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config: %w", err)
+		}
 	}
+
+	if err := config.Validate(); err != nil {
+		slog.Error("Configuration validation failed", "error", err)
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	slog.Info("Configuration validated successfully")
 
 	db, err := initDB(config.Database)
 	if err != nil {
@@ -200,7 +221,32 @@ func initializeDependencies() (*Dependencies, error) {
 	}, nil
 }
 
+func isContainerEnvironment() bool {
+	if os.Getenv("DB_SOURCE") != "" {
+		return true
+	}
+	if os.Getenv("DOCKER_ENV") == "true" {
+		return true
+	}
+	if os.Getenv("CONTAINER") == "true" {
+		return true
+	}
+
+	return false
+}
+
 func initDB(cfg internal.DatabaseConfig) (*gorm.DB, error) {
+	// Add debug logging (remove in production or use debug level)
+	slog.Info("Initializing database connection",
+		"has_source", cfg.Source != "",
+		"max_idle_conns", cfg.MaxIdleConns,
+		"max_open_conns", cfg.MaxOpenConns,
+	)
+
+	if cfg.Source == "" {
+		return nil, fmt.Errorf("database source is empty - check your configuration")
+	}
+
 	gormDB, err := gorm.Open(postgres.Open(cfg.Source), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open gorm db: %w", err)
@@ -214,10 +260,14 @@ func initDB(cfg internal.DatabaseConfig) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 
-	if err := sqlDB.Ping(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := sqlDB.PingContext(ctx); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	slog.Info("Database connection established successfully")
 	return gormDB, nil
 }

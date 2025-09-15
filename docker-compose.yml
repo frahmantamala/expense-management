@@ -31,13 +31,20 @@ services:
     restart: always
     environment:
       DB_SOURCE: "postgresql://postgres:postgres@postgres:5432/expense_management?sslmode=disable"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: expense_management
+
+      DOCKER_ENV: "true"
 
       SESSION_SECRET: "jwt-secret-key"
       BCRYPT_COST: 12
 
       PAYMENT_MOCK_API_URL: "https://1620e98f-7759-431c-a2aa-f449d591150b.mock.pstmn.io/v1"
       PAYMENT_API_KEY: "your-api-key-here"
-      PAYMENT_TIMEOUT: 10s
+      PAYMENT_TIMEOUT: 20s
       PAYMENT_WEBHOOK_URL: "http://localhost:8081/api/v1/payment/callback"
       PAYMENT_MAX_WORKERS: 10
       PAYMENT_JOB_QUEUE_SIZE: 100
@@ -61,7 +68,9 @@ services:
       - expense_network
     volumes:
       - ./config.yml:/root/config.yml:ro
-    command: ["./docker-entrypoint.sh"]
+    # command: ["./docker-entrypoint.sh"]
+    # To run the worker, override the command like below:
+    command: ["./docker-entrypoint.sh", "worker", "payment"]
 
 networks:
   expense_network:

@@ -132,6 +132,7 @@ func LoadConfigFromEnv() *Config {
 			MaxWorkers:     getEnvAsInt("PAYMENT_MAX_WORKERS", 10),
 			JobQueueSize:   getEnvAsInt("PAYMENT_JOB_QUEUE_SIZE", 100),
 			WorkerPoolSize: getEnvAsInt("PAYMENT_WORKER_POOL_SIZE", 10),
+			PaymentTimeout: getEnvAsDuration("PAYMENT_TIMEOUT", 15*time.Second),
 		},
 		Observability: ObservabilityConfig{
 			Logging: LoggingConfig{
@@ -153,15 +154,25 @@ func LoadConfigFromEnv() *Config {
 }
 
 func buildDSNFromEnv() string {
-	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "5432")
-	user := getEnv("DB_USER", "postgres")
-	password := getEnv("DB_PASSWORD", "postgres")
-	dbname := getEnv("DB_NAME", "expense_management")
+	dbSource := getEnv("DB_SOURCE", "")
+
+	if dbSource != "" {
+		return dbSource
+	}
+
+	host := getEnv("DB_HOST", "")
+	port := getEnv("DB_PORT", "")
+	user := getEnv("DB_USER", "=")
+	password := getEnv("DB_PASSWORD", "")
+	dbname := getEnv("DB_NAME", "")
 	sslmode := getEnv("DB_SSLMODE", "disable")
 
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		host, port, user, password, dbname, sslmode)
+	if host == "" || port == "" || user == "" || dbname == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s",
+		user, password, host, port, dbname, sslmode)
 }
 
 func (c *Config) Validate() error {
@@ -206,9 +217,46 @@ func (c *ServerConfig) Validate() error {
 }
 
 func (c *DatabaseConfig) Validate() error {
-	if c.MaxIdleConns > c.MaxOpenConns {
-		return errors.New("max_idle_conns cannot be greater than max_open_conns")
+	var errs []string
+
+	if c.Source == "" {
+		errs = append(errs, "database source is required")
+	} else {
+		if !strings.Contains(c.Source, "user=") && !strings.Contains(c.Source, "://") {
+			errs = append(errs, "database source must include user parameter")
+		}
+
+		if !strings.Contains(c.Source, "dbname=") && !strings.Contains(c.Source, "/") {
+			errs = append(errs, "database source must include database name")
+		}
+
+		if os.Getenv("DOCKER_ENV") == "true" || os.Getenv("DB_SOURCE") != "" {
+			if strings.Contains(c.Source, "host=localhost") {
+				errs = append(errs, "database host should not be localhost in Docker environment, use service name")
+			}
+		}
+
+		if !strings.Contains(c.Source, "password=") && !strings.Contains(c.Source, "://") {
+			errs = append(errs, "database source should include password for authentication")
+		}
 	}
+
+	if c.MaxIdleConns <= 0 {
+		errs = append(errs, "max_idle_conns must be positive")
+	}
+
+	if c.MaxOpenConns <= 0 {
+		errs = append(errs, "max_open_conns must be positive")
+	}
+
+	if c.MaxIdleConns > c.MaxOpenConns {
+		errs = append(errs, "max_idle_conns cannot be greater than max_open_conns")
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
+	}
+
 	return nil
 }
 
