@@ -68,9 +68,7 @@ services:
       - expense_network
     volumes:
       - ./config.yml:/root/config.yml:ro
-    # command: ["./docker-entrypoint.sh"]
-    # To run the worker, override the command like below:
-    command: ["./docker-entrypoint.sh", "worker", "payment"]
+    command: ["./docker-entrypoint.sh"]
 
 networks:
   expense_network:
